@@ -53,9 +53,9 @@ test("internal Mac candidate flags retain the downstream feed and explicitly req
 });
 
 test("syncing downstream main cannot create desktop releases or publish a Docker image", async () => {
-  const release = parse(await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8"));
+  const release = parse(await readFile(new URL("../.github/upstream-workflows/release.yml", import.meta.url), "utf8"));
   assert.deepEqual(Object.keys(release.on), ["workflow_dispatch"], "desktop release must be explicitly dispatched");
-  const docker = parse(await readFile(new URL("../.github/workflows/docker.yml", import.meta.url), "utf8"));
+  const docker = parse(await readFile(new URL("../.github/upstream-workflows/docker.yml", import.meta.url), "utf8"));
   assert.equal(docker.jobs.publish.if,
     "startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')",
     "branch pushes may build/smoke but must never publish an image");

@@ -8,14 +8,16 @@ const update = parse(readFileSync(join(resources, "app-update.yml"), "utf8"));
 assert.equal(update.provider, "github");
 assert.equal(update.owner, "rj-liukaiwen");
 assert.equal(update.repo, "OpenMausBot");
-assert.equal(update.private, true);
+assert.equal(update.private, undefined);
 assert.equal(update.publisherName, undefined);
 assert.equal(update.token, undefined);
 assert.equal(update.updaterCacheDirName, "openmausbot-updater");
 const meta = JSON.parse(readFileSync(join(resources, "private-release.json"), "utf8"));
 assert.equal(meta.version, JSON.parse(readFileSync("package.json", "utf8")).version);
 assert.equal(meta.repository, "rj-liukaiwen/OpenMausBot");
+assert.equal(meta.humanAcceptance, "skipped-by-owner");
+assert.equal(meta.dataDirectory, "~/.ruijiebot");
 for (const file of ["app.asar", "ui/index.html", "server/index.js", "server/ruijie-computer-proxy.js", "companion/index.js", "licenses/OpenMausBot-LICENSE.txt", "licenses/OpenMausBot-NOTICE.txt"]) {
   assert(existsSync(join(resources, file)), `Missing packaged resource: ${file}`);
 }
-console.log(`Verified private updater target, version and package resources: ${resources}`);
+console.log(`Verified public updater target, version and package resources: ${resources}`);

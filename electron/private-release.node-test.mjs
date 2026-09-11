@@ -52,12 +52,12 @@ test("release feed verification rejects changed artifacts and paths outside the 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("private evaluation config preserves app identity, resources, and explicit signing status", async () => {
+test("public evaluation config preserves app identity, resources, and explicit signing status", async () => {
   const requireBuilder = createRequire(import.meta.resolve("electron-builder"));
   const { getConfig, validateConfiguration } = requireBuilder("app-builder-lib/out/util/config/config.js");
   const config = await getConfig(fileURLToPath(new URL("../", import.meta.url)), "electron-builder.testing.mjs", null);
   await validateConfiguration(config);
-  assert.deepEqual(config.publish, [{ provider: "github", owner: "rj-liukaiwen", repo: "OpenMausBot", private: true }]);
+  assert.deepEqual(config.publish, [{ provider: "github", owner: "rj-liukaiwen", repo: "OpenMausBot" }]);
   assert.equal(config.appId, "com.openmausbot.app");
   assert.equal(config.productName, "OpenMausBot");
   assert.equal(config.mac.identity, "-");
@@ -65,6 +65,9 @@ test("private evaluation config preserves app identity, resources, and explicit 
   assert.equal(config.dmg.sign, false);
   assert.equal(config.win.publisherName, undefined);
   assert.equal(config.afterPack, "./scripts/after-pack.mjs");
+  assert.equal(typeof config.beforePack, "function");
+  assert.equal(config.artifactName, "RuijieBot-${version}-${arch}.${ext}");
+  assert.deepEqual(config.mac.signIgnore, ["tuantuan-feishu-runtime/"]);
   for (const platform of ["win", "mac", "linux"]) {
     assert(config[platform].extraResources.some(item => item.to === "browser-engine"));
   }

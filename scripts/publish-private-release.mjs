@@ -16,7 +16,7 @@ async function api(route, method = "GET", body) {
   if (!response.ok) throw new Error(`GitHub ${method} ${route}: ${response.status}: ${data.message}`);
   return data;
 }
-if (!(await api("")).private) throw new Error("Refusing to publish evaluation assets in a public repository.");
+if ((await api("")).private) throw new Error("Expected the owner-authorized public evaluation repository.");
 const allowed = new Set();
 for (const platform of ["windows", "linux", "macos"]) {
   const reportName = `build-report-${platform}.json`;
@@ -42,8 +42,22 @@ if (mode === "artifacts") {
 }
 const existing = (await api("/releases?per_page=100")).find(release => release.tag_name === `v${version}`);
 if (existing && (!existing.draft || existing.target_commitish !== sha)) throw new Error(`Release v${version} already exists for another candidate or is published. Existing assets will not be overwritten.`);
-const body = `Private evaluation build v${version}\n\nBuild commit: ${sha}\n\n- Windows x64: unsigned NSIS installer and portable ZIP.\n- Linux x64: DEB and AppImage.\n- macOS Universal (Intel and Apple Silicon): ad-hoc signed, not notarized. Final DMG signature audit included.\n- Browser and packaged-server checks run on both Mac CPU architectures in CI.\n- Physical Mac TCC, installation and upgrade acceptance: not run. These packages are test candidates.\n- Download while signed into this private GitHub repository. No GitHub token is embedded; automatic private-repository updates are not provided.\n- Enterprise components are retained for development, test and evaluation under their existing license. No redistribution or production authorization is implied.\n\nSee the attached SHA256SUMS and build reports. Do not disable Gatekeeper/SIP or reset TCC to mask a failure.\n`;
-const release = existing ?? await api("/releases", "POST", { tag_name: `v${version}`, target_commitish: sha, name: `v${version} · Private evaluation`, body, draft: true, prerelease: true });
+const body = `锐捷 Bot v${version} · 测试版
+
+构建提交：${sha}
+
+- 来源：WYunS/OpenMausBot main；保留 Enterprise（仓库所有者已确认有公开再分发授权）。
+- Windows x64：未签名安装程序和 ZIP。
+- Linux x64：DEB 和 AppImage。
+- macOS Universal：兼容 Apple Silicon 和 Intel，应用采用 ad-hoc 临时签名，未公证；飞书原生组件保留已固定的原始字节和原签名。
+- 安装版服务数据目录：~/.ruijiebot。
+- 自动化检查覆盖包完整性、更新文件校验、双架构 Mac 原生运行、浏览器及服务启动。
+- 按所有者要求沿用旧版测试流程，跳过新版真人验收门禁；真实飞书/云应用授权、Mac TCC 持久性和真人安装升级均未验收。
+- 这是测试候选版本，不代表已完成正式发布验收。
+
+附 SHA256SUMS 和构建/签名报告。
+`;
+const release = existing ?? await api("/releases", "POST", { tag_name: `v${version}`, target_commitish: sha, name: `锐捷 Bot v${version} · 测试版`, body, draft: true, prerelease: true });
 const priorAssets = existing ? await api(`/releases/${release.id}/assets?per_page=100`) : [];
 const endpoint = release.upload_url.replace(/\{.*$/, "");
 if (new URL(endpoint).hostname !== "uploads.github.com") throw new Error("Unexpected GitHub upload endpoint.");

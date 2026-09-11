@@ -20,6 +20,8 @@ if (existsSync(outputApp)) throw new Error("Universal output already exists. Use
 // vendor trees instead of merging or changing their release manifests.
 const vendor = join(release, "universal-browser-inputs");
 mkdirSync(vendor, { recursive: true });
+const feishuVendor = join(release, "universal-feishu-inputs");
+mkdirSync(feishuVendor, { recursive: true });
 function removeIntermediateSeals(directory) {
   for (const name of readdirSync(directory)) {
     const file = join(directory, name);
@@ -34,6 +36,9 @@ for (const [arch, app] of Object.entries(slices)) {
   const browser = join(app, "Contents/Resources/browser-engine");
   if (!existsSync(join(browser, "manifest.json"))) throw new Error(`Missing ${arch} browser stage`);
   renameSync(browser, join(vendor, `darwin-${arch}`));
+  const feishu = join(app, "Contents/Resources/tuantuan-feishu-runtime");
+  if (!existsSync(join(feishu, "manifest.json"))) throw new Error(`Missing ${arch} Feishu stage`);
+  renameSync(feishu, join(feishuVendor, `darwin-${arch}`));
   // Thin-app resource seals describe different binaries. They are intermediate
   // build data; recreate every signature after merging, before any packaging.
   removeIntermediateSeals(app);
@@ -55,6 +60,10 @@ const browserRoot = join(outputApp, "Contents/Resources/browser-engine");
 mkdirSync(browserRoot);
 for (const arch of ["arm64", "x64"]) cpSync(join(vendor, `darwin-${arch}`), join(browserRoot, `darwin-${arch}`), { recursive: true });
 writeFileSync(join(browserRoot, "universal.json"), `${JSON.stringify({ schemaVersion: 1, targets: ["darwin-arm64", "darwin-x64"] }, null, 2)}\n`);
+const feishuRoot = join(outputApp, "Contents/Resources/tuantuan-feishu-runtime");
+mkdirSync(feishuRoot);
+for (const arch of ["arm64", "x64"]) cpSync(join(feishuVendor, `darwin-${arch}`), join(feishuRoot, `darwin-${arch}`), { recursive: true });
+writeFileSync(join(feishuRoot, "universal.json"), `${JSON.stringify({ schemaVersion: 1, targets: ["darwin-arm64", "darwin-x64"] }, null, 2)}\n`);
 
 // electron-builder's directory target does not create updater metadata. Add it
 // to the merged app before sealing resources, using the same private feed.
@@ -69,21 +78,21 @@ execFileSync(process.execPath, ["scripts/check-private-package.mjs", join(output
 // No app byte is modified after this pass. The final DMG is mounted and
 // independently verified; a successful electron-builder exit is not the gate.
 signAdHoc(outputApp);
-verifyAdHocUniversal(outputApp, join(release, "macos-signature-audit.json"));
+await verifyAdHocUniversal(outputApp, join(release, "macos-signature-audit.json"));
 const dmgRoot = join(release, "dmg-root");
 mkdirSync(dmgRoot);
 execFileSync("/usr/bin/ditto", [outputApp, join(dmgRoot, "OpenMausBot.app")], { stdio: "inherit" });
 symlinkSync("/Applications", join(dmgRoot, "Applications"));
-const dmg = join(release, `OpenMausBot-${version}-universal.dmg`);
-const zip = join(release, `OpenMausBot-${version}-universal.zip`);
-execFileSync("/usr/bin/hdiutil", ["create", "-volname", `OpenMausBot ${version}`, "-srcfolder", dmgRoot, "-format", "UDZO", dmg], { stdio: "inherit", timeout: 600_000 });
+const dmg = join(release, `RuijieBot-${version}-mac-universal.dmg`);
+const zip = join(release, `RuijieBot-${version}-mac-universal.zip`);
+execFileSync("/usr/bin/hdiutil", ["create", "-volname", `锐捷Bot ${version}`, "-srcfolder", dmgRoot, "-format", "UDZO", dmg], { stdio: "inherit", timeout: 600_000 });
 execFileSync("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", outputApp, zip], { stdio: "inherit", timeout: 600_000 });
 execFileSync(process.execPath, ["scripts/regenerate-blockmaps.mjs", dmg, zip], { stdio: "inherit" });
 
 const mount = join(release, "dmg-verify");
 mkdirSync(mount);
 run("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mount, dmg]);
-try { verifyAdHocUniversal(join(mount, "OpenMausBot.app"), join(release, "macos-dmg-signature-audit.json")); }
+try { await verifyAdHocUniversal(join(mount, "OpenMausBot.app"), join(release, "macos-dmg-signature-audit.json")); }
 finally { run("/usr/bin/hdiutil", ["detach", mount]); }
 
 const files = [zip, dmg].map(file => {

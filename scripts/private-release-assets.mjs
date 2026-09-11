@@ -12,9 +12,9 @@ export async function digest(file, algorithm = "sha256", encoding = "hex") {
 }
 
 export function expectedArtifacts(version, platform) {
-  if (platform === "windows") return [`OpenMausBot-${version}-setup.exe`, `OpenMausBot-${version}-x64.zip`, `OpenMausBot-${version}-setup.exe.blockmap`, "latest.yml"];
-  if (platform === "linux") return [`OpenMausBot-${version}-amd64.deb`, `OpenMausBot-${version}-x86_64.AppImage`, "latest-linux.yml"];
-  if (platform === "macos") return [`OpenMausBot-${version}-universal.dmg`, `OpenMausBot-${version}-universal.zip`, `OpenMausBot-${version}-universal.dmg.blockmap`, `OpenMausBot-${version}-universal.zip.blockmap`, "latest-mac.yml", "macos-signature-audit.json", "macos-dmg-signature-audit.json"];
+  if (platform === "windows") return [`RuijieBot-${version}-setup.exe`, `RuijieBot-${version}-x64.zip`, `RuijieBot-${version}-setup.exe.blockmap`, "latest.yml"];
+  if (platform === "linux") return [`RuijieBot-${version}-amd64.deb`, `RuijieBot-${version}-x86_64.AppImage`, "latest-linux.yml"];
+  if (platform === "macos") return [`RuijieBot-${version}-mac-universal.dmg`, `RuijieBot-${version}-mac-universal.zip`, `RuijieBot-${version}-mac-universal.dmg.blockmap`, `RuijieBot-${version}-mac-universal.zip.blockmap`, "latest-mac.yml", "macos-signature-audit.json", "macos-dmg-signature-audit.json"];
   throw new Error(`Unknown package platform: ${platform}`);
 }
 
@@ -48,7 +48,7 @@ async function main() {
   await verifyFeeds(directory);
   const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
   writeFileSync(join(directory, `SHA256SUMS-${platform}.txt`), `${checksums.map(f => `${f.sha256}  ${f.name}`).join("\n")}\n`);
-  writeFileSync(join(directory, `build-report-${platform}.json`), `${JSON.stringify({ schemaVersion: 1, version, sourceSha, platform, signing: platform === "macos" ? "ad-hoc signed, not notarized" : platform === "windows" ? "unsigned" : "not applicable", humanAcceptance: "not-run", artifacts: checksums }, null, 2)}\n`);
+  writeFileSync(join(directory, `build-report-${platform}.json`), `${JSON.stringify({ schemaVersion: 1, version, sourceSha, platform, signing: platform === "macos" ? "ad-hoc signed, not notarized" : platform === "windows" ? "unsigned" : "not applicable", humanAcceptance: "skipped-by-owner", artifacts: checksums }, null, 2)}\n`);
   const staged = join(directory, "private-artifacts");
   mkdirSync(staged, { recursive: true });
   for (const name of [...files, `SHA256SUMS-${platform}.txt`, `build-report-${platform}.json`]) copyFileSync(join(directory, name), join(staged, name));

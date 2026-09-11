@@ -38,7 +38,7 @@ const xdgConfig = path.join(sandbox, "config");
 // Packaged builds deliberately use an installed profile independent of the
 // old development profile. Seed only this disposable installed profile.
 const installedUserData = path.join(xdgConfig, "锐捷Bot Installed");
-const serverData = path.join(installedUserData, "server-data");
+const serverData = path.join(home, ".ruijiebot");
 const xdgRuntime = path.join(sandbox, "runtime");
 const marker = path.join(sandbox, "cua-invocations.ndjson");
 const fakeState = path.join(sandbox, "cua-serve-count");

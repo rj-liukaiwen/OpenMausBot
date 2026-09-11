@@ -88,7 +88,7 @@ export function registerFeishu({ ipcMain, localOnly, runtime, resources, runtime
       if (host.pid !== fresh.pid || host.baseUrl !== fresh.baseUrl || host.token !== fresh.token) throw new Error('KERNEL_CHANGED');
       const prepare = createRuntimeProvisioner({ root: runtimeRoot, bundledRoot: bundledRuntimeRoot,
         ...(host.platform === 'darwin' && bundledRuntimeRoot ? {
-          verifySignedBundle: createFeishuSignatureVerifier(path.dirname(bundledRuntimeRoot)),
+          verifySignedBundle: createFeishuSignatureVerifier(path.dirname(resources)),
         } : {}),
       });
       const value = createConnector({

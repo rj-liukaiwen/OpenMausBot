@@ -1,3 +1,5 @@
+> **私有测试发行仓库**：基于 `WYunS/OpenMausBot` 的 `codex/openmaus-upgrade-0.1.71-ready`。当前准备 v0.1.73。使用 [私有测试一键发布指南](发布交付指南/04-私有测试一键发布.md) 和 [验证记录](docs/verification/private-release-0.1.73.md)。Windows 未签名；macOS Universal 为 ad-hoc 签名、未公证。下方保留上游项目说明。
+
 > ⚠️ **No affiliation with any cryptocurrency.** OpenMausBot has no token. Any coin using the OpenMausBot, Maus, or SupaMaus name is not created, endorsed, or affiliated with this project or its maintainer. I have received no tokens, payment, or allocation from anyone, and I will not be endorsing any token.
 
 <div align="center">

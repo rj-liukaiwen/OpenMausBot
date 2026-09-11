@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.73",
+  "upstreamSha": "a9c8187712e6f99c8a63dadec2835c43dd982446",
+  "repository": "rj-liukaiwen/OpenMausBot",
+  "signing": {
+    "windows": "unsigned",
+    "macos": "ad-hoc signed, not notarized"
+  },
+  "usage": "private development, test and evaluation only"
+}

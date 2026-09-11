@@ -2,6 +2,7 @@
 // pins together and run each platform's packaged, offline browser smoke test.
 // This is Chromium's headless shell, not full Chrome (which includes Widevine).
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import {
   agentBrowserReleaseUrl,
   agentBrowserReleaseVersion,
@@ -54,6 +55,12 @@ export function browserBundleSpec(target: string) {
 /** bundleDirectory is the target's directory, e.g. Resources/browser-engine. */
 export function browserBundlePaths(bundleDirectory: string, target: string) {
   const spec = browserBundleSpec(target);
+  // A universal desktop app carries both reviewed vendor trees unchanged.
+  // The marker also makes a missing slice fail closed instead of selecting an
+  // executable for the other CPU or silently downloading a replacement.
+  if (target.startsWith("darwin-") && existsSync(join(bundleDirectory, "universal.json"))) {
+    bundleDirectory = join(bundleDirectory, target);
+  }
   return {
     directory: bundleDirectory,
     manifest: join(bundleDirectory, "manifest.json"),

@@ -75,8 +75,11 @@ function requireUpdaterTarget(resources, label) {
   const updateFile = path.join(resources, "app-update.yml");
   requireFile(updateFile);
   const update = readFileSync(updateFile, "utf8");
-  if (!/^owner: milind-soni$/m.test(update) || !/^repo: OpenMausBot$/m.test(update)) {
-    fail(`${label} app-update.yml does not point at milind-soni/OpenMausBot`);
+  const owner = process.env.OMB_EXPECTED_UPDATE_OWNER || "milind-soni";
+  const repo = process.env.OMB_EXPECTED_UPDATE_REPO || "OpenMausBot";
+  const lines = update.split(/\r?\n/);
+  if (!lines.includes(`owner: ${owner}`) || !lines.includes(`repo: ${repo}`)) {
+    fail(`${label} app-update.yml does not point at ${owner}/${repo}`);
   }
 }
 

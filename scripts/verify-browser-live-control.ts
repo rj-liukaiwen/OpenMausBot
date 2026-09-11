@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { dirname } from 'node:path';
+import { bundleInventory } from './prepare-browser.mjs';
 import { launchVerificationServer, runControlOmb } from "./control-omb.ts";
 import { openSse, type SseRecorder } from "../server/testing/sse.ts";
 import { browserSessionId, closeBrowserSession } from "../server/browser-engine.ts";
@@ -9,6 +11,8 @@ import { browserSessionId, closeBrowserSession } from "../server/browser-engine.
 const binaryPath = process.env.OMB_VERIFY_BROWSER_BINARY;
 const executablePath = process.env.OMB_VERIFY_BROWSER_CHROME;
 assert(binaryPath && executablePath, "Set OMB_VERIFY_BROWSER_BINARY and OMB_VERIFY_BROWSER_CHROME.");
+const shippedChrome = () => bundleInventory(dirname(executablePath)).filter((entry: { path: string }) => entry.path !== 'debug.log');
+const originalChrome = shippedChrome();
 const fixture = await launchVerificationServer(process.env, undefined, undefined, { binaryPath, executablePath });
 let stream: SseRecorder | undefined;
 let botId = "";
@@ -66,6 +70,11 @@ try {
   await action({ type: "input_mouse", eventType: "mouseMoved", x: 80, y: 80 });
   await action({ type: "input_keyboard", eventType: "char", text: "Browser works" });
   await assert.rejects(action({ type: "navigate", url: "http://127.0.0.1:1/" }), /page could not be opened/);
+  // Speak TLS to our plain HTTP fixture to exercise Chromium SSL diagnostics.
+  // Native headless-shell may append debug.log. No shipped bytes may change;
+  // preview preparation archives that exact extra file, never rebuilds blindly.
+  await assert.rejects(action({ type: 'navigate', url: `https://127.0.0.1:${address.port}/` }), /page could not be opened/);
+  assert.deepEqual(shippedChrome(), originalChrome, 'Browser use modified shipped Chrome resources');
   console.log(JSON.stringify({ phase: "offline-navigation-recovered", ok: true }));
   const timeoutStarted = Date.now();
   await assert.rejects(action({ type: "navigate", url: `http://127.0.0.1:${address.port}/slow` }), /page could not be opened/);

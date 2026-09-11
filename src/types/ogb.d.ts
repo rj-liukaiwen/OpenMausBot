@@ -99,6 +99,7 @@ const __APP_VERSION__: string;
   interface Window {
     ogb?: {
       platform: NodeJS.Platform;
+      retryConnectedAppsService?: () => Promise<{ ready: boolean; registrationState: string }>;
       /** Saved servers and the active one (desktop Server menu). Present on
        * the local server's UI; a remote server's page sees a reduced bridge. */
       environments?: {
@@ -120,7 +121,7 @@ const __APP_VERSION__: string;
         pair(endpoint: string, code: string): Promise<DesktopRemoteClientState>;
         disconnect(): Promise<DesktopRemoteClientState>;
       };
-      /** Optional Windows local-only integration; all actions are validated natively. */
+      /** Optional Windows/macOS local-only integration; all actions are validated natively. */
       feishu?: import("../tuantuan/feishu/model").FeishuBridge;
       companionAccount?: {
         state(): Promise<CompanionAccountState>;

@@ -14,7 +14,7 @@ import { parseArgs } from "node:util";
 import { inflateSync } from "node:zlib";
 import { browserBundlePaths, browserBundleSpec } from "../server/browser-bundle-release.ts";
 import { executableTarget } from "./prepare-cloudflared.mjs";
-import { WINDOWS_VENDOR_VERSION, verifyVendorCandidate, verifyVendorPatch } from "./build-windows-browser-vendor.mjs";
+import { WINDOWS_VENDOR_VERSION, verifyVendorCandidate, verifyVendorPatch, verifyVendorConsolePatch } from "./build-windows-browser-vendor.mjs";
 
 const { values } = parseArgs({ options: {
   resources: { type: "string" }, target: { type: "string" },
@@ -30,6 +30,7 @@ const target = values.target ?? `${process.platform}-${process.arch}`;
 const spec = browserBundleSpec(target);
 const paths = browserBundlePaths(join(resolve(values.resources), "browser-engine"), target);
 const manifest = JSON.parse(await readFile(paths.manifest, "utf8"));
+assert(!manifest.candidate || values['engine-candidate'], 'Candidate resources cannot pass normal release acceptance');
 assert.equal(manifest.schemaVersion, spec.schemaVersion);
 assert.equal(manifest.target, target);
 for (const component of ["engine", "chrome"]) {
@@ -54,6 +55,7 @@ if (values["engine-candidate"] !== undefined) {
   const candidateBytes = await readFile(enginePath);
   verifyVendorCandidate(JSON.parse(await readFile(join(candidateDirectory, "provenance.json"), "utf8")), candidateBytes);
   verifyVendorPatch(await readFile(join(candidateDirectory, "agent-browser-windows-stdio.patch")));
+  verifyVendorConsolePatch(await readFile(join(candidateDirectory, "agent-browser-windows-no-console.patch")));
   assert.equal(executableTarget(candidateBytes), "win32-x64");
   for (const license of ["agent-browser-LICENSE.txt", "LICENSE-axe-core.txt", "LICENSE-axe-core-THIRD-PARTY.txt"]) {
     assert.deepEqual(await readFile(join(candidateDirectory, license)), await readFile(join(paths.licenses, license)), `Candidate changed upstream notice ${license}`);

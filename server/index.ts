@@ -514,6 +514,11 @@ type UtilityParentPort = {
 // SAFETY: Electron's utility-process runtime is the only environment that
 // supplies parentPort; plain Node intentionally leaves it absent.
 const utilityParentPort = (process as NodeJS.Process & { parentPort?: UtilityParentPort }).parentPort;
+if (utilityParentPort) {
+  const { createBrokerClientTransport } = await import('../electron/managed-composio-transport.mjs');
+  const transport = createBrokerClientTransport(utilityParentPort);
+  composio.setManagedBrokerFetch(transport.fetch);
+}
 type DesktopPrivateMessage = BrowserCleanupWireRequest | {
   type: "openmausbot:browser-control";
   botId: string;
@@ -980,7 +985,7 @@ function cancelDirectTurnDispatch(botId: string, expectedThreadId?: string): Dir
  * browser profile or per bot (docs/plans/browser-engine.md). Null, with the
  * reason logged once, when the engine is not on this machine. */
 const browserRuntime = new BrowserRuntime();
-const browserLive = new BrowserLive({ runtime: browserRuntime });
+const browserLive = new BrowserLive({ runtime: browserRuntime, log: (message) => console.info(message) });
 // Temporary profiles last for this server run, but are never saved to disk.
 // The viewer and the agent must address the SAME temporary browser.
 const temporaryBrowserSessions = new Map<string, string>();
@@ -14504,7 +14509,8 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
     if (method === "GET" && path === "/api/connectors/catalog") {
       const { cards, source } = url.searchParams.get("cached") === "1"
         ? composio.cachedToolkits(cfg) : await composio.listToolkits(cfg);
-      return json(res, 200, { configured: composio.configured(cfg), mode: composio.connectionMode(cfg), source, cards });
+      return json(res, 200, { configured: composio.configured(cfg), mode: composio.connectionMode(cfg),
+        registrationState: composio.managedBrokerRegistrationState(), source, cards });
     }
     if (method === "GET" && path === "/api/connectors/connected") {
       const availability = composio.connectorAvailability(cfg);

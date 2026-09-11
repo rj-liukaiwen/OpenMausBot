@@ -250,6 +250,9 @@ export async function installAgentBrowserBinary(options: {
   const platform = options.platform ?? process.platform;
   const asset = options.asset ?? resolveAgentBrowserReleaseAsset(platform, options.arch ?? process.arch, options.musl ?? isMusl(platform));
   if (!asset) throw new Error(`agent-browser publishes no build for ${platform}-${options.arch ?? process.arch}.`);
+  if (agentBrowserReleaseUrl(asset).startsWith("local:")) {
+    throw new Error("This Windows browser revision must be supplied by the RuijieBot package. Prepare the pinned vendor dependency and reinstall the corrected package; the old engine will not be downloaded.");
+  }
   const destination = pinnedBinaryPath(options.dataDir, platform, options.arch);
   const directory = join(destination, "..");
   mkdirSync(directory, { recursive: true, mode: 0o700 });

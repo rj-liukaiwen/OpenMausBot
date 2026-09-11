@@ -1,138 +1,53 @@
 ---
 name: windows-release
-description: Build and verify the Windows desktop build (NSIS installer + latest.yml) for the canonical OpenMausBot release and its legacy updater mirror. Use when cutting a release, shipping a new version to Windows users, or when a Windows user reports they are stuck on an old version. Windows only — does not cover the macOS dmg/notarization flow.
+description: Prepare, verify, and explicitly release the RuijieBot Windows installer from WYunS/OpenMausBot. Use for Windows packaging, release readiness, or installed-update failures; macOS uses the separate native signing and acceptance guides.
 ---
 
-# Windows release
+# RuijieBot Windows delivery
 
-Ships `OpenMausBot-<version>-setup.exe` and its update feed to
-[milind-soni/OpenMausBot](https://github.com/milind-soni/OpenMausBot/releases).
-The unified release workflow mirrors the same bytes to the legacy releases
-repository for apps installed before the updater migration.
+## Read the authoritative guides first
 
-**Scope: Windows only.** The macOS build is a separate flow (dmg + notarytool +
-staple) that must run on a Mac. This skill never touches mac artifacts — but see
-[Every release ships both](#every-release-ships-both) before you finish.
+Read these files completely before preparing or packaging:
 
-## Preconditions
+1. `发布交付指南/04-通用回归与发布门禁.md` — recurring regressions, evidence and beforePack gates.
+2. `发布交付指南/01-Windows打包指导.md` — Windows preparation, native resources and installation acceptance.
 
-- **Run on Windows.** NSIS packaging from macOS needs Wine; don't.
-- **Node 24+** (`package.json` `engines`). Node 23 builds fine but pnpm warns on
-  every step and CI runs 24 — don't debug a runtime oddity on the wrong major.
-- **pnpm** via `corepack pnpm`. If `corepack enable` fails with EPERM (no admin),
-  drop a `pnpm.cmd` shim containing `@echo off` / `corepack pnpm %*` somewhere on
-  PATH — `package:win` chains `pnpm build && …` and needs bare `pnpm` to resolve.
+For macOS work, use `02-macOS打包指导.md`, `03-macOS真人验收测试指导.md` and
+`macOS代码签名与TCC身份策略.md` in that directory. Windows results do not approve macOS.
+The numbered guides are the source of truth; do not maintain a second set of runtime pins here.
 
-## 1. Version
+## Separate source synchronization, candidate creation and publication
 
-Bump `version` in `package.json`. It must match the tag on the GitHub release you
-upload to, and it becomes the version electron-updater compares against.
+- Source delivery is `https://github.com/WYunS/OpenMausBot`, branch `main`.
+  Resolve the actual remote URL and pin one full commit for both platforms.
+- A source commit/push does not authorize generating installers or uploading releases.
+  Main pushes run checks only. Desktop Release is manually triggered; Docker branch runs cannot publish images.
+- The inherited Release workflow still contains upstream feed/mirror assumptions. Review/adapt it under
+  separate release authority before running it. Never upload to the author's repositories as part of Ruijie delivery.
+- Only change the version when requested for a release; source synchronization does not require a version bump.
 
-## 2. Build
+## Build and verification boundary
 
-```powershell
-pnpm install
-pnpm typecheck
-pnpm package:win
-```
+Use Windows x64, Node 24 and the package-manager version locked in `package.json`.
+Install with `corepack pnpm install --frozen-lockfile`; follow the numbered guides' exact preparation sequence.
+The normal package entry is `pnpm package:win`, using `electron-builder.ruijie.mjs` with its gates intact.
 
-`package:win` deliberately omits `build:speech` — the dictation helper is a signed
-macOS Swift binary and has no Windows counterpart.
+Before creating a candidate, require current-SHA source/native checks and accepted compiled desktop preview:
+bundled Feishu CLI/Node, browser no-console/stream/control checks, cloud-app proxy recovery and real authorized
+read, Chinese response behavior, and development/installed data isolation. See the common guide for commands.
+Missing, skipped or blocked evidence remains a blocker; never fabricate a passing receipt.
 
-Output in `release/`:
+After explicitly authorized candidate creation, use an isolated authorized Windows account for installation
+acceptance. Verify actual executable/resource paths, taskbar icon, `锐捷Bot` uninstall/shortcut names,
+`RuijieBot-<version>-setup.exe` naming, and installed `~/.ruijiebot` versus development `~/.openmausbot`.
+The developer's Electron atom icon is not proof that the packaged icon changed.
 
-| File | Purpose |
-|---|---|
-| `OpenMausBot-<version>-setup.exe` | the installer |
-| `latest.yml` | **the update feed** — see step 4 |
-| `OpenMausBot-<version>-setup.exe.blockmap` | differential updates |
-| `OpenMausBot-<version>-x64.zip` | portable, not used by the updater |
+## Explicit publication only
 
-## 3. Verify before uploading
+After final installation acceptance and separate publication approval, deliver to WYunS/OpenMausBot only:
+the versioned installer, its blockmap, generated `latest.yml`, and any approved portable/stable-name copies.
+Check the exact release SHA, platform scope, final file hashes and feed owner before uploading.
+Do not overwrite published bytes or hand-edit updater hashes. A previous installer is not the new source build.
 
-Three things silently produce a broken app if wrong. Check all three:
-
-```powershell
-Test-Path release\win-unpacked\resources\server\index.js   # harness server
-Test-Path release\win-unpacked\resources\ui\index.html     # built UI
-Get-Content release\win-unpacked\resources\app-update.yml  # feed config
-```
-
-- Missing `server/index.js` → `utilityProcess.fork` fails → the 🐭 "Couldn't start
-  the bot server" page.
-- Missing `ui/index.html` → server has nothing to serve → black window.
-- `app-update.yml` must point at `milind-soni/OpenMausBot` and, while the
-  build is unsigned, **must not contain `publisherName`** — electron-updater would
-  reject every update as untrusted.
-
-Then smoke-test the installer itself. Run it, and confirm:
-
-1. It installs per-user with no UAC prompt and launches.
-2. The chat window renders (not the error page). Server logs land in
-   `%APPDATA%\OpenMausBot\logs\server.log`.
-3. The model picker lists at least one provider — this exercises the `.cmd`-shim
-   resolution in `server/procs.ts`, which only ever runs for real on Windows.
-4. No update popup appears on launch. Background check failures are silent by
-   design; a popup here means that regressed.
-
-## 4. Publish
-
-Upload to the **same tag** as the macOS release for that version, so one release
-carries both platforms.
-
-```powershell
-Copy-Item release/OpenMausBot-<version>-setup.exe release/OpenMausBot-setup.exe
-gh release upload v<version> --repo milind-soni/OpenMausBot `
-  release/OpenMausBot-<version>-setup.exe `
-  release/OpenMausBot-setup.exe `
-  release/OpenMausBot-<version>-setup.exe.blockmap `
-  release/latest.yml
-```
-
-Prefer the repository's **Release** workflow, which builds all platforms from
-one pinned commit and mirrors the complete, byte-identical asset set safely.
-If this emergency manual path is used, the same four files must also be attached
-to the matching draft in `milind-soni/openmausbot-releases`; never replace the
-bytes of an already-published asset.
-
-Both names are required, for different consumers:
-
-- **`OpenMausBot-<version>-setup.exe`** is what `latest.yml` references by name and
-  sha512. The auto-updater downloads exactly this.
-- **`OpenMausBot-setup.exe`** is a byte-identical copy that gives the README's
-  `/releases/latest/download/OpenMausBot-setup.exe` button a stable URL. This
-  mirrors `OpenMausBot.dmg` sitting beside `OpenMausBot-<version>.dmg`.
-
-### latest.yml is not optional
-
-Without it every installed Windows app 404s on check and stays on its version
-forever. It is generated by `package:win` even under `--publish never`.
-
-**Never hand-edit it or carry one forward from a previous build.** It pins the
-installer's sha512; a mismatch makes the updater download and then reject the
-update, which looks like "updates silently do nothing".
-
-## Every release ships both
-
-A version that exists on macOS but not on this release is a Windows user stuck on
-old code with no signal that anything is wrong — the updater reports "up to date"
-because `latest.yml` still describes the older build.
-
-So: **whenever a new version goes out, this flow runs too.** If Windows can't ship
-for some reason, don't publish the mac-only release under a new version tag either
-— or accept that Windows is knowingly frozen and say so in the release notes.
-
-Because the two builds must run on two machines, the tag is the join point: cut the
-release, attach mac artifacts from the Mac, attach Windows artifacts from here.
-
-## Known: the build is unsigned
-
-No certificate is configured, so SmartScreen shows "unknown publisher" and users
-click **More info → Run anyway**. The README documents this. Auto-update still
-works *because* it's unsigned (no `publisherName` to verify against).
-
-If signing is added later, it goes under `win.signtoolOptions` or
-`win.azureSignOptions` in `electron-builder.yml` — electron-builder 26 nests these;
-there is no top-level `win.certificateFile`. Once signed, keep the certificate
-subject stable forever, or list both old and new in `publisherName`; changing it
-strands every already-installed user.
+Report source checks, native checks, final installer checks and publication as separate states.
+For unsigned Windows builds, report the real signing status; do not invent a publisher name or certificate.

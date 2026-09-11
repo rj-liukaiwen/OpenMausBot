@@ -150,6 +150,7 @@ interface Viewer extends OpenOptions {
   frameAt?: number;
   hiddenFrame?: ObjectValue;
   pendingFrame?: ObjectValue;
+  pendingState: Map<string, ObjectValue>;
   pendingActions: number;
   pressedKeys: Set<string>;
   pressedButtons: Set<string>;
@@ -159,8 +160,9 @@ interface Viewer extends OpenOptions {
 
 export class BrowserLive {
   private readonly runtime: BrowserRuntime;
+  private readonly log: (message: string) => void;
   private readonly viewers = new Map<string, Viewer>();
-  constructor({ runtime }: { runtime: BrowserRuntime }) { this.runtime = runtime; }
+  constructor({ runtime, log = () => {} }: { runtime: BrowserRuntime; log?: (message: string) => void }) { this.runtime = runtime; this.log = log; }
 
   private current(viewer: Viewer): boolean {
     try { return !viewer.closed && !viewer.res.destroyed && !viewer.res.writableEnded && viewer.isCurrent(); } catch { return false; }
@@ -170,7 +172,12 @@ export class BrowserLive {
     if (!this.current(viewer)) { this.close(viewer); return; }
     if (!viewer.res.headersSent) return; // A peer can change control while this viewer is still starting.
     if (viewer.res.writableLength > MAX_BUFFER) { this.close(viewer); return; }
-    if (viewer.blocked) return;
+    if (viewer.blocked) {
+      // A JPEG commonly fills the HTTP buffer. Keep bounded latest metadata
+      // instead of permanently losing the title/URL emitted right after it.
+      if (['tabs', 'url', 'status'].includes(String(message.type))) viewer.pendingState.set(String(message.type), message);
+      return;
+    }
     const { type, ...data } = message;
     let written: boolean;
     try { written = viewer.res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`); }
@@ -182,6 +189,12 @@ export class BrowserLive {
       viewer.res.once("drain", () => {
         viewer.blocked = false; clearTimeout(viewer.drainTimer);
         this.control(viewer.session);
+        for (const [type, message] of viewer.pendingState) {
+          if (viewer.blocked || viewer.closed) break;
+          viewer.pendingState.delete(type);
+          const holder = this.runtime.heldBy(viewer.session);
+          if (!holder || holder === viewer.id) this.send(viewer, message);
+        }
         const pending = viewer.pendingFrame; viewer.pendingFrame = undefined;
         if (pending) this.frame(viewer, pending);
       });
@@ -232,13 +245,17 @@ export class BrowserLive {
     viewer.socket.send(JSON.stringify(message));
   }
 
-  private close(viewer: Viewer, endResponse = true): void {
+  private close(viewer: Viewer, endResponse = true, reason = "view-closed"): void {
     if (viewer.closed) return;
+    // Correlation IDs and a fixed reason only; never log URLs, page text,
+    // cookies, input, or browser capability tokens.
+    this.log(`browser-view closed bot=${viewer.botId} viewer=${viewer.id} reason=${reason}`);
     viewer.closed = true;
     this.viewers.delete(viewer.id);
     clearTimeout(viewer.heartbeat); clearTimeout(viewer.drainTimer);
     viewer.socket?.close();
     viewer.hiddenFrame = undefined; viewer.pendingFrame = undefined;
+    viewer.pendingState.clear();
     if (!viewer.restarting) {
       this.abandonPressedInput(viewer);
       this.runtime.release(viewer.session, viewer.id);
@@ -260,7 +277,12 @@ export class BrowserLive {
     if (!this.current(viewer)) throw new BrowserLiveError("This browser view is no longer available.", 409);
     // Leave time for the native navigation timeout to return a completed
     // error before the process watchdog has to kill an unresponsive command.
-    const env = browserRuntimeEnv({ ...viewer.spec.env, AGENT_BROWSER_SESSION: viewer.session, AGENT_BROWSER_DEFAULT_TIMEOUT: "15000" });
+    // Share the agent's exact daemon settings. DEFAULT_TIMEOUT participates
+    // in the native daemon fingerprint: changing it only for the viewer
+    // restarts the daemon whenever agent tools and viewer commands alternate,
+    // disconnecting the live stream. Bound navigation via its CDP deadline
+    // and CLI work via execFile's watchdog, not a different launch setting.
+    const env = browserRuntimeEnv({ ...viewer.spec.env, AGENT_BROWSER_SESSION: viewer.session });
     const completedFailure = () => new CompletedBrowserActionError(args[0] === "open" && args.length > 1
       ? "The page could not be opened. Check the address or network connection, or open another page."
       : "The browser could not complete this command. Try another action.");
@@ -338,7 +360,7 @@ export class BrowserLive {
     if (this.viewers.size >= 8 || [...this.viewers.values()].filter((v) => v.session === options.session).length >= 2) {
       throw new BrowserLiveError("Too many browser views are open. Close another browser panel first.", 429);
     }
-    const viewer: Viewer = { ...options, id: randomUUID(), closed: false, blocked: false, pendingActions: 0, restarting: false, pressedKeys: new Set(), pressedButtons: new Set() };
+    const viewer: Viewer = { ...options, id: randomUUID(), closed: false, blocked: false, pendingState: new Map(), pendingActions: 0, restarting: false, pressedKeys: new Set(), pressedButtons: new Set() };
     if (!this.current(viewer)) throw new BrowserLiveError("This browser view is no longer available.", 409);
     this.viewers.set(viewer.id, viewer);
     options.res.once("close", () => this.close(viewer));
@@ -371,8 +393,8 @@ export class BrowserLive {
         if (message.type === "frame") this.frame(viewer, message);
         else this.send(viewer, message);
       });
-      socket.addEventListener("error", () => { if (!viewer.restarting) { this.send(viewer, { type: "error", message: "The browser stream disconnected. Reopen the browser panel." }); this.close(viewer); } });
-      socket.addEventListener("close", () => { if (!viewer.restarting) this.close(viewer); });
+      socket.addEventListener("error", () => { if (!viewer.restarting) { this.send(viewer, { type: "error", retryable: true, message: "The browser stream disconnected." }); this.close(viewer, true, "native-stream-error"); } });
+      socket.addEventListener("close", () => { if (!viewer.restarting) this.close(viewer, true, "native-stream-closed"); });
       // Install stream handlers before awaiting the upgrade: upstream can send
       // its cached status, tabs and opening frame immediately after opening.
       await new Promise<void>((resolve, reject) => {
@@ -384,7 +406,11 @@ export class BrowserLive {
       });
       if (!this.current(viewer)) { this.close(viewer); return; }
       viewer.heartbeat = setInterval(() => {
-        if (!this.current(viewer) || (viewer.frameAt && Date.now() - viewer.frameAt > 2 * HEARTBEAT_MS)) { this.close(viewer); return; }
+        if (!this.current(viewer)) { this.close(viewer, true, "view-expired"); return; }
+        if (viewer.frameAt && Date.now() - viewer.frameAt > 2 * HEARTBEAT_MS) {
+          this.send(viewer, { type: "error", retryable: true, message: "The browser picture stopped responding." });
+          this.close(viewer, true, "frame-ack-timeout"); return;
+        }
         this.control(viewer.session);
         this.send(viewer, { type: "heartbeat" });
       }, HEARTBEAT_MS);

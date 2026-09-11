@@ -34,10 +34,15 @@ import { desktopViewerPermissionAllowed } from "./desktop-viewer-permissions.mjs
 import { appPermissionAllowed, externalWebUrl } from "./app-permissions.mjs";
 import {
   ensureManagedComposioCredentials,
+  createManagedComposioRegistrationLoop,
+  DEFAULT_COMPOSIO_BROKER_URL,
   managedComposioAccess,
   managedComposioChildEnvironment,
   normalizeManagedComposioBrokerUrl,
 } from "./managed-composio.mjs";
+import { createBrokerHostTransport } from "./managed-composio-transport.mjs";
+import { releaseBrokerUrl } from './connected-apps-release.mjs';
+import { desktopRuntimeLayout } from './desktop-runtime-layout.mjs';
 import {
   createManagedCompanionTunnel,
   managedCompanionTunnelAccess,
@@ -113,11 +118,19 @@ const { MIN_BOUNDS, normalizeUnreadCount, parseWindowState, resolveWindowState }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OWNS_LOCAL_SERVER = app.isPackaged || process.env.OMB_DESKTOP_SERVER === "1";
+const desktopLayout = desktopRuntimeLayout({ packaged: app.isPackaged,
+  preview: !app.isPackaged && OWNS_LOCAL_SERVER && process.env.OMB_DESKTOP_PREVIEW === '1',
+  appRoot: app.getAppPath(), resourcesPath: process.resourcesPath, platform: process.platform, arch: process.arch });
+// Explorer/Finder launches do not inherit the packager's shell variables.
+// Read the non-secret endpoint baked into this exact signed/reviewed package.
+const PACKAGED_COMPOSIO_BROKER_URL = app.isPackaged
+  ? releaseBrokerUrl(JSON.parse(fs.readFileSync(path.join(app.getAppPath(), 'package.json'), 'utf8')).ruijieConnectedAppsBrokerUrl)
+  : DEFAULT_COMPOSIO_BROKER_URL;
 const APP_ID = app.isPackaged ? "com.openmausbot.app" : "com.openmausbot.app.localdev.source";
 const APP_TITLE = "锐捷Bot";
 app.setName(APP_TITLE);
-// Keep the installed product independent from this checkout's historical
-// development profile. The visible product name is unchanged.
+// Keep Electron's browser/window state independent from this checkout's
+// historical development profile. The server data has its own home below.
 if (app.isPackaged) app.setPath("userData", path.join(app.getPath("appData"), "锐捷Bot Installed"));
 // A development build runs from electron.exe, whose default Windows taskbar
 // identity/icon is the Electron atom. Give it the same identity as the
@@ -127,7 +140,6 @@ if (process.platform === "win32") nativeTheme.themeSource = nativeThemeSourceFor
 // 127.0.0.1 explicitly — vite binds IPv4; a bare "localhost" here can
 // resolve to ::1 and paint a black window
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://127.0.0.1:5199";
-const DEFAULT_COMPOSIO_BROKER_URL = "https://openmausbot-composio.milindsoni201.workers.dev";
 let SERVER_PORT = Number(process.env.OMB_PORT || 8799);
 const APP_ICON = process.platform === "win32" && !app.isPackaged
   ? path.join(__dirname, "..", "build", "icon-ruijie-orb-depth.ico")
@@ -313,9 +325,10 @@ function desktopDataDir() {
   // then pass this exact resolved path to the utility child. server/config.ts
   // intentionally treats an empty OMB_DATA_DIR differently, so inheriting it
   // without normalization would lease one directory and write another.
-  return process.env.OMB_DATA_DIR || (app.isPackaged
-    ? path.join(app.getPath("userData"), "server-data")
-    : path.join(app.getPath("home"), ".openmausbot"));
+  return process.env.OMB_DATA_DIR || path.join(
+    app.getPath("home"),
+    app.isPackaged ? ".ruijiebot" : ".openmausbot",
+  );
 }
 
 async function stopUtilityServer(proc, timeoutMs = UTILITY_SERVER_STOP_TIMEOUT_MS) {
@@ -448,7 +461,7 @@ async function secureWorkspaceConfig() {
 function composioBrokerUrl() {
   const configured = process.env.OMB_COMPOSIO_BROKER_URL?.trim();
   return normalizeManagedComposioBrokerUrl(
-    configured || (OWNS_LOCAL_SERVER ? DEFAULT_COMPOSIO_BROKER_URL : ""),
+    configured || (OWNS_LOCAL_SERVER ? PACKAGED_COMPOSIO_BROKER_URL : ""),
   );
 }
 
@@ -1055,7 +1068,7 @@ function installDesktopMutationHeader() {
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     const ownsTarget = isDesktopMutationTarget(details.url, {
       serverPort: SERVER_PORT,
-      developmentUrl: app.isPackaged ? undefined : DEV_URL,
+      developmentUrl: desktopLayout.built ? undefined : DEV_URL,
     });
     if (!ownsTarget) {
       callback({ requestHeaders: details.requestHeaders });
@@ -1088,9 +1101,7 @@ function receivePhoneSecretSave(proc, rawMessage) {
 }
 
 async function startServerOn(port) {
-  const entry = app.isPackaged
-    ? path.join(process.resourcesPath, "server", "index.js")
-    : path.join(app.getAppPath(), "server", "index.ts");
+  const entry = desktopLayout.server;
   const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
   const childEnv = managedComposioChildEnvironment(composioBrokerUrl(), secureCredentials, {
     ...process.env,
@@ -1103,8 +1114,12 @@ async function startServerOn(port) {
     // from the launching shell. It starts fail-closed until this exact main
     // process sends the private in-memory connection after spawn.
     OMB_DESKTOP_PARENT: "1",
-    ...(app.isPackaged ? { OMB_STATIC_DIR: path.join(process.resourcesPath, "ui") } : {}),
+    ...(desktopLayout.built ? { OMB_STATIC_DIR: desktopLayout.ui, OMB_BROWSER_BUNDLE_DIR: desktopLayout.browser } : {}),
     OMB_RESOURCES_PATH: resourcesPath,
+    // The Windows installer ships the complete pinned browser engine. A fresh
+    // isolated profile should expose it immediately; an explicit user false
+    // in config.json still wins on every later launch.
+    ...(desktopLayout.built ? { OMB_BROWSER_DEFAULT_ENABLED: "1" } : {}),
     OMB_SKILLS_DIR: path.join(resourcesPath, "skills"),
     OMB_PORT: String(port),
     // the server advertises this to remote clients so version skew is visible
@@ -1121,11 +1136,20 @@ async function startServerOn(port) {
     ...workspaceCredentialEnv(secureCredentials),
   });
   delete childEnv.OMB_BROWSER_CONNECTION;
+  if (desktopLayout.built) {
+    delete childEnv.OMB_AGENT_BROWSER_PATH;
+    delete childEnv.AGENT_BROWSER_EXECUTABLE_PATH;
+  }
   slog(`fork ${entry} port=${port}`);
   const proc = utilityProcess.fork(entry, [], {
     env: childEnv,
-    execArgv: app.isPackaged ? [] : ["--experimental-strip-types"],
+    execArgv: desktopLayout.built ? [] : ["--experimental-strip-types"],
     stdio: ["ignore", "pipe", "pipe"],
+  });
+  const brokerTransport = createBrokerHostTransport({
+    port: proc,
+    access: () => managedComposioAccess(composioBrokerUrl(), secureCredentials),
+    fetchImpl: (url, init) => connectedAppsSession().fetch(url, init),
   });
   let resolveServerExit;
   utilityServerExits.set(proc, new Promise((resolve) => {
@@ -1148,6 +1172,7 @@ async function startServerOn(port) {
   });
   let exited = false;
   proc.once("exit", (code) => {
+    brokerTransport.close();
     exited = true;
     trustedApprovalMode.rejectProcess(proc);
     resolveServerExit();
@@ -1175,7 +1200,7 @@ async function startServerOn(port) {
     // child a "foreign owner" on its first health answer.
     pid: () => proc.pid,
     bootTimeoutMs: SERVER_BOOT_TIMEOUT_MS,
-    requireStatic: app.isPackaged,
+    requireStatic: desktopLayout.built,
     isExited: () => exited,
   });
   if (identity.outcome === "ready") return { proc };
@@ -1224,11 +1249,21 @@ function syncManagedComposioCredentials() {
     serverProc.postMessage({
       type: "openmausbot:managed-composio",
       access: managedComposioAccess(composioBrokerUrl(), secureCredentials),
+      registrationState: managedComposioAccess(composioBrokerUrl(), secureCredentials) ? 'ready' : composioRegistrationState,
     });
   } catch (error) {
     slog(`connected-apps credential sync failed: ${error?.message ?? error}`);
   }
 }
+
+// Non-persistent cookie jar; Chromium tracks Windows/macOS system proxy/PAC
+// changes for each request. Registration AND subsequent catalog/OAuth/MCP
+// requests must share this network stack, not just the first registration.
+function connectedAppsSession() {
+  return session.fromPartition('ruijiebot-connected-apps');
+}
+let composioRegistrationLoop;
+let composioRegistrationState = 'pending';
 
 // The page is built at failure time (not import time): the message depends on
 // how the boot failed, and the log path comes from LOG_DIR so Windows and
@@ -1266,7 +1301,7 @@ const displayMediaGuard = createDisplayMediaGuard();
 let displayMediaRequestCount = 0;
 
 function rendererOrigin() {
-  return new URL(app.isPackaged || desktopRemoteAccess ? `http://127.0.0.1:${SERVER_PORT}` : DEV_URL).origin;
+  return new URL(desktopLayout.built || desktopRemoteAccess ? `http://127.0.0.1:${SERVER_PORT}` : DEV_URL).origin;
 }
 
 function respondToDisplayMediaRequest(callback, response) {
@@ -1608,6 +1643,15 @@ function browserSurfaceForEvent(event) {
   return browserSurface;
 }
 
+ipcMain.handle("connected-apps:retry", localOnly("connected-apps:retry", async () => {
+  // No renderer-controlled endpoint, credentials or network options. The same
+  // host-owned registration and private Chromium Session are used at startup.
+  if (!desktopRemoteAccess && OWNS_LOCAL_SERVER && !credentialStoreUnavailable && !desktopShutdownStarted) {
+    await composioRegistrationLoop?.retry();
+  }
+  const ready = !!managedComposioAccess(composioBrokerUrl(), secureCredentials);
+  return { ready, registrationState: ready ? 'ready' : composioRegistrationState };
+}));
 ipcMain.handle("browser:available", localOnly("browser:available", () => Boolean(browserSurface && browserHost?.url)));
 ipcMain.handle("browser:state", localOnly("browser:state", (event, botId) => browserSurfaceForEvent(event).state(botId)));
 ipcMain.handle("browser:layout", localOnly("browser:layout", (event, botId, bounds, profile, mode, layoutOwner) =>
@@ -2127,7 +2171,7 @@ function createWindow() {
     targetUrl = serverReady ? `http://127.0.0.1:${SERVER_PORT}` : buildErrorPage({ allPortsOccupied: serverStartConflictOnly });
   } else if (remote) {
     targetUrl = remote.origin;
-  } else if (app.isPackaged) {
+  } else if (desktopLayout.built) {
     targetUrl = serverReady ? `http://127.0.0.1:${SERVER_PORT}` : buildErrorPage({ allPortsOccupied: serverStartConflictOnly });
   } else {
     targetUrl = DEV_URL;
@@ -2234,10 +2278,11 @@ ipcMain.handle("desktop:export-diagnostics", localOnly("desktop:export-diagnosti
 // copy of the chat UI instead of the file. Ask where to put it and copy it
 // there instead: a save dialog tells the user the file landed somewhere and
 // where, which a silent copy into ~/Downloads does not. The path is
-// renderer-controlled, so it must resolve inside ~/.openmausbot and be a
+// renderer-controlled, so it must resolve inside this edition's server data
+// directory and be a
 // regular file — never a symlink escape or directory.
 ipcMain.handle("desktop:save-file", localOnly("desktop:save-file", async (event, rawPath) => {
-  return withSavableFile(rawPath, { home: os.homedir() }, async ({ defaultName, copyTo }) => {
+  return withSavableFile(rawPath, { home: os.homedir(), root: desktopDataDir() }, async ({ defaultName, copyTo }) => {
     const parent = BrowserWindow.fromWebContents(event.sender);
     const defaultPath = await defaultSaveName(app.getPath("downloads"), defaultName);
     const choice = await dialog.showSaveDialog(parent ?? undefined, {
@@ -2457,7 +2502,7 @@ desktopFeishu = registerFeishu({
     ready: serverReady,
     pid: serverProc?.pid,
     baseUrl: `http://127.0.0.1:${SERVER_PORT}`,
-    rendererOrigin: app.isPackaged
+    rendererOrigin: desktopLayout.built
       ? `http://127.0.0.1:${SERVER_PORT}`
       : new URL(DEV_URL).origin,
     token: desktopMutationToken,
@@ -2465,6 +2510,7 @@ desktopFeishu = registerFeishu({
   resources: app.isPackaged
     ? path.join(process.resourcesPath, "tuantuan-feishu")
     : path.join(app.getAppPath(), "connectors", "feishu"),
+  bundledRuntimeRoot: desktopLayout.feishu,
   runtimeRoot: path.join(app.getPath("userData"), "feishu"),
   credentials: () => {
     if (!secureCredentialState || credentialStoreUnavailable) throw new Error("CREDENTIAL_STORE_UNAVAILABLE");
@@ -2778,17 +2824,43 @@ app.whenReady().then(async () => {
     slog("skipping connected-apps registration: the credential store was unreadable this launch");
   }
   if (!desktopRemoteAccess && OWNS_LOCAL_SERVER && composioBrokerUrl() && !credentialStoreUnavailable) {
-    void updateSecureCredentialDocument(async (credentials) => {
-      await ensureManagedComposioCredentials({
-        brokerUrl: composioBrokerUrl(),
-        credentials,
-        // The shared credential state performs the one atomic encrypted
-        // write after this registration has derived its complete document.
-        saveCredentials: async () => {},
-        log: slog,
-      });
-      return credentials;
-    }).finally(syncManagedComposioCredentials);
+    composioRegistrationLoop = createManagedComposioRegistrationLoop({
+      hasAccess: () => !!managedComposioAccess(composioBrokerUrl(), secureCredentials),
+      attempt: async () => {
+        const credentials = structuredClone(secureCredentials);
+        const originalToken = credentials.composioBrokerToken;
+        await ensureManagedComposioCredentials({
+          brokerUrl: composioBrokerUrl(), credentials,
+          fetchImpl: (url, init) => connectedAppsSession().fetch(url, { ...init, credentials: 'omit' }),
+          // Network waits never hold the shared encrypted-store write lock.
+          saveCredentials: async (next) => {
+            if (desktopShutdownStarted) return;
+            await updateSecureCredentialDocument((current) => {
+              if (current.composioBrokerToken !== originalToken) return current;
+              return { ...current, composioBrokerToken: next.composioBrokerToken,
+                composioInstallationId: next.composioInstallationId };
+            });
+          },
+          log: (message) => {
+            slog(message);
+            if (message.includes('NETWORK_UNREACHABLE')) composioRegistrationState = 'network-unreachable';
+            else if (message.includes('SERVICE_OR_AUTH_ERROR')) composioRegistrationState = 'service-error';
+          },
+        });
+        // A definitive 401 followed by a failed registration must not leave
+        // the old invalid token looking like usable access to the retry loop.
+        if (originalToken && !credentials.composioBrokerToken && !desktopShutdownStarted) {
+          await updateSecureCredentialDocument((current) => {
+            if (current.composioBrokerToken !== originalToken) return current;
+            const next = { ...current };
+            delete next.composioBrokerToken; delete next.composioInstallationId;
+            return next;
+          });
+        }
+        syncManagedComposioCredentials();
+      },
+    });
+    composioRegistrationLoop.start();
   }
   // in-app auto-update (packaged only) — checks GitHub releases, downloads on
   // the user's click, installs on "Restart to update"
@@ -2826,6 +2898,7 @@ process.once("SIGTERM", requestSignalQuit);
 
 app.on("before-quit", (e) => {
   desktopShutdownStarted = true;
+  composioRegistrationLoop?.close();
   if (browserDescriptorRefreshTimer) {
     clearInterval(browserDescriptorRefreshTimer);
     browserDescriptorRefreshTimer = null;

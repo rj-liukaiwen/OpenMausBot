@@ -61,7 +61,7 @@ export function shouldShowStaleConnectorWarning(authoritative: boolean, userRequ
 /** Warm the account inventory once the app server is ready. Concurrent panel
  * opens share the same request, and recent data survives modal unmounts. */
 export function preloadConnectedApps(force = false): Promise<ConnectorInventory> {
-  if (!force && cachedConnectorStatus !== null && Date.now() - cachedConnectorStatusAt < CONNECTOR_STATUS_CACHE_MS) {
+  if (!force && cachedConnectorStatusAuthoritative && cachedConnectorStatus !== null && Date.now() - cachedConnectorStatusAt < CONNECTOR_STATUS_CACHE_MS) {
     return Promise.resolve({
       services: cachedConnectorStatus,
       authoritative: cachedConnectorStatusAuthoritative,
@@ -109,6 +109,10 @@ export function requiresAccountAlias(message: string) {
 }
 
 export type ConnectorInventoryPhase = "loading" | "ready" | "error";
+
+export function shouldRecoverConnectedApps(configured: boolean, stale: boolean, phase: ConnectorInventoryPhase) {
+  return !configured || stale || phase === "error";
+}
 
 export function connectorActionLabel(
   phase: ConnectorInventoryPhase,
@@ -202,6 +206,7 @@ export function PluginsPanel() {
   const [source, setSource] = useState<"api" | "curated">("curated");
   const [configured, setConfigured] = useState(true);
   const [mode, setMode] = useState<"managed" | "self-hosted" | "unavailable">("unavailable");
+  const [registrationState, setRegistrationState] = useState<string>();
   // Paint what we last knew before any request goes out: the module cache if
   // this window already fetched, otherwise the inventory saved on disk. An
   // empty panel is never the first thing a connected user sees.
@@ -229,6 +234,9 @@ export function PluginsPanel() {
   const pollTimers = useRef(new Map<string, ReturnType<typeof setInterval>>());
   const statusGenerations = useRef(new Map<string, number>());
   const latestStatusRequests = useRef(new Map<string, number>());
+  const recoveryRequest = useRef<Promise<void> | null>(null);
+  const manualRecoveryRequest = useRef<Promise<void> | null>(null);
+  const [retryingService, setRetryingService] = useState(false);
 
   const refreshStatus = useCallback((slugs: string[]): Promise<Record<string, ConnectorStatus>> => {
     if (!slugs.length) return Promise.resolve({});
@@ -268,13 +276,13 @@ export function PluginsPanel() {
       .catch(() => ({}));
   }, []);
 
-  const refreshConnectedStatus = useCallback((force = false): Promise<Record<string, ConnectorStatus>> => {
+  const refreshConnectedStatus = useCallback((force = false, userRequested = force): Promise<Record<string, ConnectorStatus>> => {
     const requestGenerations = new Map(statusGenerations.current);
     setRefreshing(true);
     return preloadConnectedApps(force)
       .then(({ services, authoritative }) => {
         setStale(!authoritative);
-        setShowStaleWarning(shouldShowStaleConnectorWarning(authoritative, force));
+        setShowStaleWarning(shouldShowStaleConnectorWarning(authoritative, userRequested));
         setStatus((current) => mergeCompleteConnectorStatus(
           current,
           services,
@@ -296,11 +304,11 @@ export function PluginsPanel() {
       .finally(() => setRefreshing(false));
   }, []);
 
-  const loadConnectionInventory = useCallback((force = false) => {
+  const loadConnectionInventory = useCallback((force = false, userRequested = force) => {
     const hadCachedInventory = cachedConnectorStatus !== null;
     if (!hadCachedInventory) setInventoryPhase("loading");
     setError(null);
-    return refreshConnectedStatus(force)
+    return refreshConnectedStatus(force, userRequested)
       .then((services) => {
         setInventoryPhase("ready");
         return services;
@@ -320,7 +328,8 @@ export function PluginsPanel() {
   useEffect(() => {
     if (inventoryPhase !== "ready") return;
     cachedConnectorStatus = status;
-    cachedConnectorStatusAt = Date.now();
+    // Merely rendering a stale snapshot must not renew its cache lifetime.
+    if (!stale) cachedConnectorStatusAt = Date.now();
     cachedConnectorStatusAuthoritative = !stale;
   }, [inventoryPhase, stale, status]);
 
@@ -337,6 +346,7 @@ export function PluginsPanel() {
       setSource(r.source ?? "curated");
       setConfigured(Boolean(r.configured));
       setMode(r.mode ?? "unavailable");
+      setRegistrationState(r.registrationState);
     };
     // Render original brand URLs immediately, then update the optional full
     // catalog in the background. Neither request gates login or chat.
@@ -357,11 +367,40 @@ export function PluginsPanel() {
     return () => { catalogGeneration.current += 1; };
   }, [loadCatalog]);
 
+  useEffect(() => {
+    if (!shouldRecoverConnectedApps(configured, stale, inventoryPhase)) return;
+    let active = true;
+    const timer = setInterval(() => {
+      if (!active || recoveryRequest.current || manualRecoveryRequest.current) return;
+      // Force a network read, not a repeatedly renewed stale cache entry.
+      // Registration owns its own bounded host-side backoff.
+      recoveryRequest.current = Promise.all([loadCatalog(), loadConnectionInventory(true, false)])
+        .then(() => {}).finally(() => { recoveryRequest.current = null; });
+    }, 5000);
+    return () => { active = false; clearInterval(timer); };
+  }, [configured, stale, inventoryPhase, loadCatalog, loadConnectionInventory]);
+
   const refreshPlugins = useCallback(() => {
+    if (manualRecoveryRequest.current) return manualRecoveryRequest.current;
+    setRetryingService(true);
     setIconRevision((revision) => revision + 1);
-    void loadConnectionInventory(true);
-    void loadCatalog();
-  }, [loadCatalog, loadConnectionInventory]);
+    manualRecoveryRequest.current = Promise.resolve().then(async () => {
+      // VPN/proxy restoration should not require waiting out a 60-second
+      // registration backoff or reinstalling. Never invoke the host for a
+      // remote server or for a user's separately configured API-key service.
+      if (!remoteClient && mode !== "self-hosted") await window.ogb?.retryConnectedAppsService?.();
+      await recoveryRequest.current;
+      recoveryRequest.current = Promise.all([loadConnectionInventory(true), loadCatalog()]).then(() => {});
+      await recoveryRequest.current;
+    }).catch(() => {
+      setError({ key: "connectors.networkUnavailable" });
+    }).finally(() => {
+      recoveryRequest.current = null;
+      manualRecoveryRequest.current = null;
+      setRetryingService(false);
+    });
+    return manualRecoveryRequest.current;
+  }, [remoteClient, mode, loadCatalog, loadConnectionInventory]);
 
   useEffect(() => {
     window.addEventListener("online", refreshPlugins);
@@ -535,14 +574,14 @@ export function PluginsPanel() {
             {surface === "apps" && (
               <button
                 onClick={refreshPlugins}
-                disabled={refreshing}
+                disabled={refreshing || retryingService}
                 className={cn(
                   "relative rounded-lg p-2 text-ink-secondary hover:bg-raised hover:text-ink disabled:opacity-50",
                   showStaleWarning && "text-warning",
                 )}
                 title={showStaleWarning ? t("connectors.stale") : t("connectors.refreshTitle")}
               >
-                <RefreshCw size={17} className={cn(refreshing && "animate-spin")} />
+                <RefreshCw size={17} className={cn((refreshing || retryingService) && "animate-spin")} />
                 {showStaleWarning && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-warning" />}
               </button>
             )}
@@ -618,17 +657,25 @@ export function PluginsPanel() {
         {/* A stale snapshot is represented by the small refresh status dot;
             "configure your own connection service" is advice for someone
             who never set one up, not for a temporary upstream outage. */}
-        {!configured && !stale && (
+        {!configured && (
           <div className="mx-6 mb-1 rounded-xl bg-warning/10 px-4 py-3 text-[13px] text-warning sm:mx-8">
-            {t("connectors.notConfigured")}{" "}
+            {t(registrationState === 'network-unreachable' ? 'connectors.networkUnavailable'
+              : registrationState === 'service-error' ? 'connectors.serviceUnavailable'
+              : registrationState === 'pending' ? 'connectors.connectingService'
+              : 'connectors.notConfigured')}{" "}
             <button
               className={cn("font-medium underline underline-offset-2", remoteClient && "hidden")}
+              disabled={retryingService}
               onClick={() => {
+                if (registrationState && registrationState !== "unavailable") {
+                  void refreshPlugins();
+                  return;
+                }
                 close();
                 dispatch({ type: "toggleAppSettings", open: true });
               }}
             >
-              {t("connectors.openSettings")}
+              {t(registrationState && registrationState !== "unavailable" ? "connectors.action.retry" : "connectors.openSettings")}
             </button>
           </div>
         )}

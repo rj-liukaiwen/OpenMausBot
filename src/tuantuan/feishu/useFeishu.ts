@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import type { FeishuAction, FeishuSnapshot } from "./model";
+import type { FeishuAction, FeishuBridge, FeishuSnapshot } from "./model";
 import { createFeishuSession } from "./session";
 
+export function localFeishuBridge(host?: {
+  platform: string; remoteClient?: { active: boolean }; feishu?: FeishuBridge;
+}) {
+  return host && ["win32", "darwin"].includes(host.platform) && !host.remoteClient?.active
+    ? host.feishu : undefined;
+}
+
 export function useFeishu(enabled: boolean) {
-  const bridge = typeof window !== "undefined" && window.ogb?.platform === "win32"
-    && !window.ogb.remoteClient?.active ? window.ogb?.feishu : undefined;
+  const bridge = localFeishuBridge(typeof window !== "undefined" ? window.ogb : undefined);
   const [snapshot, setSnapshot] = useState<FeishuSnapshot>({ state: null, busy: null, error: null });
   const session = useRef<ReturnType<typeof createFeishuSession> | null>(null);
   useEffect(() => {

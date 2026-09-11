@@ -19,6 +19,7 @@ $env:OMB_PORT = [string]$developmentServerPort
 # Let Electron own the source server so encrypted plugin credentials travel
 # over the same private parent/child channel used by packaged builds.
 $env:OMB_DESKTOP_SERVER = '1'
+$env:OMB_DESKTOP_PREVIEW = '1'
 $env:OMB_BROWSER_CONNECTION = $null
 
 # Match packaged Bot behavior: discover the installed Harness.  Development
@@ -168,6 +169,16 @@ function Invoke-Launcher {
     ([string]$_.CommandLine).Trim() -in @($quotedDesktopCommandLine, $plainDesktopCommandLine)
   } | Select-Object -First 1
   if ($alreadyRunning) {
+    $nodeCommand = Get-Command node.exe -ErrorAction Stop
+    $freshness = Start-Process -FilePath $nodeCommand.Source `
+      -ArgumentList @((Join-Path $repoRoot 'scripts\desktop-build-receipt.mjs')) `
+      -WorkingDirectory $repoRoot -WindowStyle Hidden `
+      -RedirectStandardOutput (Join-Path $logRoot 'freshness.log') `
+      -RedirectStandardError (Join-Path $logRoot 'freshness-error.log') `
+      -Wait -PassThru
+    if ($freshness.ExitCode -ne 0) {
+      throw 'Source changed. Quit the development app completely, then open this shortcut again to rebuild. Your running tasks were not stopped.'
+    }
     # Let Electron's single-instance event restore, maximize and focus the
     # existing window. The short-lived second process exits normally.
     [void](Start-DesktopApp)
@@ -180,15 +191,16 @@ function Invoke-Launcher {
   # this wrapper owns only Vite.
   Stop-LocalDevelopmentService $developmentServerPort
   Stop-LocalDevelopmentService 5199
-  Start-LocalService 'dev' 'vite'
-
-  $deadline = (Get-Date).AddSeconds(45)
-  while ((Get-Date) -lt $deadline -and -not (Test-LocalPort 5199)) {
-    Start-Sleep -Milliseconds 250
-  }
-  if (-not (Test-LocalPort 5199)) {
-    throw "The local UI did not become ready. See $logRoot"
-  }
+  # Preview the same compiled UI/server and native pins as the installer.
+  # The receipt rejects stale source/output; no Vite-only dependency fallback.
+  $nodeCommand = Get-Command node.exe -ErrorAction Stop
+  $prepare = Start-Process -FilePath $nodeCommand.Source `
+    -ArgumentList @((Join-Path $repoRoot 'scripts\prepare-local-preview.mjs')) `
+    -WorkingDirectory $repoRoot -WindowStyle Hidden `
+    -RedirectStandardOutput (Join-Path $logRoot 'prepare.log') `
+    -RedirectStandardError (Join-Path $logRoot 'prepare-error.log') `
+    -Wait -PassThru
+  if ($prepare.ExitCode -ne 0) { throw "Preview preparation failed. See $logRoot\prepare-error.log" }
 
   $env:CUA_DRIVER_PATH = Join-Path $repoRoot 'dist-native\cua-win32-x64\cua-driver.exe'
   $desktopProcess = Start-DesktopApp
@@ -209,18 +221,26 @@ function Invoke-Launcher {
 
 $launcherMutex = [Threading.Mutex]::new($false, 'Local\RuijieBotDevLauncher')
 $launcherLockTaken = $false
+$launcherFailure = $null
 try {
   try {
-    $launcherLockTaken = $launcherMutex.WaitOne([TimeSpan]::FromSeconds(60))
+    # A source rebuild can legitimately exceed a minute. The first launcher
+    # owns preparation and its error reporting; repeated clicks join that
+    # launch instead of timing out and announcing a false startup failure.
+    $launcherLockTaken = $launcherMutex.WaitOne(0)
   } catch [Threading.AbandonedMutexException] {
     $launcherLockTaken = $true
   }
-  if (-not $launcherLockTaken) { throw 'Another startup is still in progress.' }
-  Invoke-Launcher
+  if ($launcherLockTaken) { Invoke-Launcher }
 } catch {
-  Show-LaunchFailure $_.Exception.Message
-  exit 1
+  $launcherFailure = $_.Exception.Message
 } finally {
   if ($launcherLockTaken) { $launcherMutex.ReleaseMutex() }
   $launcherMutex.Dispose()
+}
+# Never retain the startup lock while waiting for a user to dismiss a dialog.
+# A new explicit retry must be able to start even while that old dialog exists.
+if ($null -ne $launcherFailure) {
+  Show-LaunchFailure $launcherFailure
+  exit 1
 }

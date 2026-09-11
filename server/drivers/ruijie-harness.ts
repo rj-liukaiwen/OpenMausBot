@@ -27,6 +27,7 @@ import { newEventId, newId } from "../contracts.ts";
 import { computerProxyEnv } from "../container-computer.ts";
 import { mutatingComputerTool } from "../computer-tools.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { withoutHarnessWebSearch } from "./ruijie-harness-preset.ts";
 import {
   defaultRuijieBridgePath,
   ruijieHarnessLocator,
@@ -270,6 +271,8 @@ function mcpServerName(name: NamedStdioIntegration["name"], key: string): string
 }
 
 function mcpPresetContent(base: string, integrations: NamedStdioIntegration[], key: string): string {
+  const browser = integrations.find((entry) => entry.name === "browser")?.integration;
+  if (browser) base = withoutHarnessWebSearch(base);
   const suffix = base.endsWith("\n") ? "" : "\n";
   const entries = integrations.map(({ name, integration }) =>
     `- id: openmaus-${name}-${key}\n` +
@@ -286,7 +289,12 @@ function mcpPresetContent(base: string, integrations: NamedStdioIntegration[], k
     // starting. A new task/session will resync its tools after recovery.
     `    failOnStartupError: ${name === "computer" ? "true" : "false"}\n`
   ).join("");
-  return `${base}${suffix}\n# Managed by OpenMausBot. This is user configuration, not Harness source.\n${entries}`;
+  const aliases = browser ? `- id: openmaus-browser-tools-${key}\n` +
+    `  name: ${JSON.stringify(SPAWNED_PROXIES.harnessBrowserTools)}\n` +
+    `  config:\n` +
+    `    url: ${JSON.stringify(browser.env.OMB_HARNESS_URL ?? "")}\n` +
+    `    token: ${JSON.stringify(browser.env.OMB_BROWSER_TOKEN ?? "")}\n` : "";
+  return `${base}${suffix}\n# Managed by OpenMausBot. This is user configuration, not Harness source.\n${entries}${aliases}`;
 }
 
 async function ensureIntegrationPreset(
@@ -785,6 +793,7 @@ export const RuijieHarnessDriver: ProviderDriver<RuijieHarnessConfig> = {
         if (!sessionId && integrationKey === "none" && typeof turn.resumeCursor === "string" && turn.resumeCursor.startsWith("session-")) {
           sessionId = turn.resumeCursor;
         }
+        const freshSession = !sessionId;
         if (!sessionId) {
           if (integrations.length === 0) {
             const created = await rpc<{ sessionId: string }>(endpoint, "session.create", { cwd: turn.cwd });
@@ -856,7 +865,12 @@ export const RuijieHarnessDriver: ProviderDriver<RuijieHarnessConfig> = {
         ]);
         emit({ type: "session.started", threadId: turn.threadId, turnId: pending.turnId, sessionId, model: turn.model ?? catalog.default });
         emit({ type: "turn.started", threadId: turn.threadId, turnId: pending.turnId });
-        const prompt = turn.system ? `${turn.system}\n\n${turn.text}` : turn.text;
+        // Browser capability rotation requires a new scoped preset/session.
+        // Keep that security boundary, but don't send a bare “continue” into
+        // an empty conversation. The server's bounded recovery text includes
+        // this turn and prior visible history; never replay it in a reused session.
+        const turnText = freshSession && turn.resumeCursor && turn.recoveryText ? turn.recoveryText : turn.text;
+        const prompt = turn.system ? `${turn.system}\n\n${turnText}` : turnText;
         const content = [
           { type: "text" as const, text: prompt },
           ...await Promise.all((turn.images ?? []).map(async (image) => ({

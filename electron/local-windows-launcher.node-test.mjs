@@ -22,7 +22,7 @@ test("the desktop wrapper starts PowerShell without flashing a console", async (
   assert.match(source, /shell\.Run command, 0, False/);
 });
 
-test("the development desktop owns the credential-aware server and Vite stays external", async () => {
+test("the shortcut owns the credential-aware server and prepares installer-equivalent compiled resources", async () => {
   const source = await readFile(launcher, "utf8");
   assert.match(source, /Join-Path \$repoRoot 'node_modules\\vite\\bin\\vite\.js'/);
   assert.match(source, /\$developmentServerPort\s*=\s*38799/);
@@ -30,7 +30,9 @@ test("the development desktop owns the credential-aware server and Vite stays ex
   assert.match(source, /Stop-LocalDevelopmentService 5199/);
   assert.match(source, /\$env:OMB_DESKTOP_SERVER\s*=\s*'1'/);
   assert.doesNotMatch(source, /Start-LocalService 'dev:server'/);
-  assert.match(source, /Start-LocalService 'dev' 'vite'/);
+  assert.doesNotMatch(source, /Start-LocalService 'dev' 'vite'/);
+  assert.match(source, /prepare-local-preview\.mjs/);
+  assert.match(source, /\$env:OMB_DESKTOP_PREVIEW\s*=\s*'1'/);
   assert.match(source, /\$env:OMB_CONTROL_PLANE_URL\s*=\s*'https:\/\/accounts\.openmausbot\.com'/);
   assert.match(source, /\[char\]0x9510/);
   assert.match(source, /\[char\]0x6377/);
@@ -80,8 +82,8 @@ test("an opted-in development desktop uses the same private server ownership pat
   const source = await readFile(mainProcess, "utf8");
   assert.match(source, /const OWNS_LOCAL_SERVER\s*=\s*app\.isPackaged\s*\|\|\s*process\.env\.OMB_DESKTOP_SERVER\s*===\s*"1"/);
   assert.match(source, /else if \(OWNS_LOCAL_SERVER\) \{\s*serverReady = await startServerPackaged\(\)/);
-  assert.match(source, /app\.isPackaged\s*\?\s*path\.join\(process\.resourcesPath, "server", "index\.js"\)\s*:\s*path\.join\(app\.getAppPath\(\), "server", "index\.ts"\)/);
-  assert.match(source, /execArgv:\s*app\.isPackaged\s*\?\s*\[\]\s*:\s*\["--experimental-strip-types"\]/);
+  assert.match(source, /const entry = desktopLayout.server/);
+  assert.match(source, /execArgv:\s*desktopLayout.built\s*\?\s*\[\]\s*:\s*\["--experimental-strip-types"\]/);
 });
 
 test("the shortcut is never rewritten while it is launching", async () => {
@@ -109,8 +111,10 @@ test("the development shortcut uses a branded native launcher", async () => {
   assert.equal(installerAppId, "com.openmausbot.app.localdev.source");
   assert.equal(mainAppId, installerAppId);
   assert.match(mainSource, /app\.isPackaged\) app\.setPath\("userData", path\.join\(app\.getPath\("appData"\), "锐捷Bot Installed"\)\)/);
-  assert.match(mainSource, /server-data/);
+  assert.match(mainSource, /app\.isPackaged \? "\.ruijiebot" : "\.openmausbot"/);
+  assert.match(mainSource, /root: desktopDataDir\(\)/);
   assert.match(mainSource, /title:\s*"锐捷Bot"/);
+  assert.match(mainSource, /OMB_BROWSER_DEFAULT_ENABLED:\s*"1"/);
   assert.match(mainSource, /nativeTheme\.themeSource\s*=\s*nativeThemeSourceForSkin\(skin\)/);
   assert.match(installerSource, /set-windows-shortcut-app-id\.ps1/);
 });

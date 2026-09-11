@@ -109,6 +109,14 @@ mac:
       to: cloudflared/cloudflared
     - from: dist-native/browser/darwin-${arch}
       to: browser-engine
+    - from: connectors/feishu
+      to: tuantuan-feishu
+      filter:
+        - "**/*"
+        - "!**/*.test.mjs"
+        - "!fixture-smoke.mjs"
+    - from: dist-native/feishu-runtime/darwin-${arch}
+      to: tuantuan-feishu-runtime
   extendInfo:
     NSMicrophoneUsageDescription: OpenMausBot uses the microphone for voice dictation into the composer.
     NSSpeechRecognitionUsageDescription: OpenMausBot transcribes your voice on-device to type messages for you.
@@ -126,6 +134,7 @@ dmg:
   artifactName: OpenMausBot-${version}-${arch}.dmg
 
 win:
+  artifactName: RuijieBot-${version}-${arch}.${ext}
   target:
     - target: nsis
       arch: x64
@@ -139,6 +148,10 @@ win:
         - "**/*"
         - "!**/*.test.mjs"
         - "!fixture-smoke.mjs"
+    # Pinned, hash-verified native runtime. The installed connector prefers
+    # these files, so first connection never depends on GitHub availability.
+    - from: dist-native/feishu-runtime/win32-x64
+      to: tuantuan-feishu-runtime
     - from: dist-native/cua-win32-x64/cua-driver.exe
       to: cua-driver.exe
     - from: dist-native/cloudflared/win32-x64/cloudflared.exe
@@ -159,10 +172,11 @@ nsis:
   oneClick: true
   perMachine: false
   shortcutName: 锐捷Bot
+  uninstallDisplayName: 锐捷Bot
   # Versioned, like the .dmg. The README's /latest/download/ button needs a
-  # STABLE filename, so ship a second copy named OpenMausBot-setup.exe on the
+  # STABLE filename, so ship a second copy named RuijieBot-setup.exe on the
   # release — the same trick as OpenMausBot.dmg beside OpenMausBot-${version}.dmg.
-  artifactName: OpenMausBot-${version}-setup.${ext}
+  artifactName: RuijieBot-${version}-setup.${ext}
 
 linux:
   target:

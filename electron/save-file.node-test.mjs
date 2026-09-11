@@ -47,6 +47,22 @@ describe("save-file path validation", () => {
     assert.equal(await resolveSavablePath(pathToFileURL(file).href, { home }), expected);
   });
 
+  it("accepts an explicitly selected packaged-edition data root", async () => {
+    const installedRoot = path.join(home, ".ruijiebot");
+    const file = path.join(installedRoot, "workspaces", "bot", "installed-report.docx");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "installed");
+
+    assert.equal(
+      await resolveSavablePath(file, { home, root: installedRoot }),
+      await fs.promises.realpath(file),
+    );
+    await assert.rejects(resolveSavablePath(path.join(botHome, "workspaces", "bot", "report.docx"), {
+      home,
+      root: installedRoot,
+    }), { message: "Only files created by your bots can be saved" });
+  });
+
   it("accepts a file under a symlinked bot home", { skip: !canSymlink }, async () => {
     const realHome = fs.mkdtempSync(path.join(os.tmpdir(), "omb-real-home-"));
     const linkedHome = fs.mkdtempSync(path.join(os.tmpdir(), "omb-linked-home-"));

@@ -1,4 +1,472 @@
 {
+  "targets": {
+    "darwin-arm64": {
+      "schemaVersion": 1,
+      "reviewDate": "2026-09-11",
+      "policyException": {
+        "approved": true,
+        "scope": "Only previously reviewed shared components plus go-keyring v0.2.8 MIT/Apache notices and the two named MPL exceptions for this exact darwin-arm64 Node executable. See MAC_AUDIT.md.",
+        "copyleftExceptionGranted": true,
+        "components": [
+          "Unicode-3.0 and legacy Unicode/ICU notices",
+          "Zlib",
+          "BlueOak-1.0.0 minimatch",
+          "V8 Python/PSF historical license bundle",
+          "SipHash CC0-1.0",
+          "SQLite/ICU TZ and identified Go public-domain material",
+          "ICU IPADIC",
+          "Sun fdlibm",
+          "MPL: smartstring 1.0.1 in Node 24.15.0 darwin-arm64 only",
+          "MPL: NSS-derived root certificate data in Node 24.15.0 darwin-arm64 only"
+        ],
+        "excluded": [
+          "GPL",
+          "AGPL",
+          "SSPL",
+          "All MPL components except the two exact entries in copyleftExceptions",
+          "Other unapproved copyleft",
+          "Unknown components or changed artifact hashes"
+        ],
+        "copyleftExceptions": [
+          {
+            "artifact": "node",
+            "executableSha256": "3200fbd9f7fd4410426dd541e10d1ab829d3472f270d743c7fabd1696c03fe32",
+            "component": "smartstring",
+            "version": "1.0.1",
+            "license": "MPL-2.0+",
+            "sourcePath": "sources/smartstring-1.0.1.crate"
+          },
+          {
+            "artifact": "node",
+            "executableSha256": "3200fbd9f7fd4410426dd541e10d1ab829d3472f270d743c7fabd1696c03fe32",
+            "component": "NSS-derived root certificate data",
+            "version": "Node v24.15.0 tagged certdata and generated header",
+            "license": "MPL-2.0",
+            "sourcePath": "sources/node-v24.15.0-certdata.txt"
+          }
+        ]
+      },
+      "releaseApproved": true,
+      "engineeringClosureComplete": true,
+      "blockers": [],
+      "artifacts": {
+        "node": {
+          "version": "24.15.0",
+          "platform": "darwin-arm64",
+          "executableSha256": "3200fbd9f7fd4410426dd541e10d1ab829d3472f270d743c7fabd1696c03fe32",
+          "noticeFiles": [
+            "NODE_LICENSE.txt",
+            "NODE_ADDITIONAL_NOTICES.txt",
+            "SWC_THIRD_PARTY_NOTICES.txt",
+            "UNICODE_NOTICES.txt",
+            "RUST_THIRD_PARTY_NOTICES.txt",
+            "SWC_GENERATED_NOTICES.txt",
+            "MPL-2.0.txt",
+            "SOURCE_AVAILABILITY.md",
+            "sources/smartstring-1.0.1.crate",
+            "sources/node-v24.15.0-certdata.txt",
+            "sources/node-v24.15.0-node_root_certs.h.txt",
+            "MAC_SOURCE_AVAILABILITY.md"
+          ],
+          "archiveSha256": "372331b969779ab5d15b949884fc6eaf88d5afe87bde8ba881d6400b9100ffc4"
+        },
+        "cli": {
+          "version": "1.0.93",
+          "platform": "darwin-arm64",
+          "archiveSha256": "eaa09754925c00a6858e91518a49ab8e0a24bd4178e4698a7b185046b8ea24e2",
+          "executableSha256": "9092c3f255b749afdc2a842be5d582511d978424c11326d59af90c0fd5f5c044",
+          "noticeFiles": [
+            "CLI_THIRD_PARTY_NOTICES.txt",
+            "UNICODE_NOTICES.txt",
+            "MAC_CLI_ADDITIONAL_NOTICES.txt",
+            "MAC_SOURCE_AVAILABILITY.md"
+          ]
+        }
+      },
+      "files": [
+        {
+          "path": "NODE_LICENSE.txt",
+          "sha256": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18",
+          "bytes": 156926
+        },
+        {
+          "path": "UNICODE_NOTICES.txt",
+          "sha256": "572fb7f13ac827da9a264e67103813a5e643996577e6ff6e0d3975f556e36f52",
+          "bytes": 5347
+        },
+        {
+          "path": "CLI_THIRD_PARTY_NOTICES.txt",
+          "sha256": "348fbc5447e6ee2e0a0063a849b77ca1157fc1550337fa7ddb4e79b8cd6491f7",
+          "bytes": 122288
+        },
+        {
+          "path": "NODE_ADDITIONAL_NOTICES.txt",
+          "sha256": "02919e95631ba3297e500f6c5691832649c597bf18422ae6d84715d5233f7c9e",
+          "bytes": 86814
+        },
+        {
+          "path": "SWC_THIRD_PARTY_NOTICES.txt",
+          "sha256": "868568b3d43a1282b8558e3e8d40b02bf9dbca8d449abacafe58b55bee453993",
+          "bytes": 1154951
+        },
+        {
+          "path": "components.json",
+          "sha256": "213ab7624e57ab567b8bc85888eec94ed1d3ca4d80ee4e1f6f4bbc2292d20967",
+          "bytes": 82367
+        },
+        {
+          "path": "SWC_PROVENANCE.json",
+          "sha256": "1f77660665cc93bc64df1afa49032106191fc692d188171798b5f6d5c6bcc5be",
+          "bytes": 652
+        },
+        {
+          "path": "DATA_PROVENANCE.json",
+          "sha256": "9715c954945b326feb8f1902e2da3dac0fdff465c3a4aaeed7db48103a7fb3b3",
+          "bytes": 604
+        },
+        {
+          "path": "sources/smartstring-1.0.1.crate",
+          "sha256": "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29",
+          "bytes": 29555
+        },
+        {
+          "path": "sources/node-v24.15.0-certdata.txt",
+          "sha256": "3b98d4e3ff57a326d9587c33633039c8c3a9cf0b55f7ca581d7598ff329eb1f3",
+          "bytes": 1443468
+        },
+        {
+          "path": "sources/node-v24.15.0-node_root_certs.h.txt",
+          "sha256": "b8381bf64c65982dc9e93e87489e98f25cc660cfe46bd0f53ffaf99154ac6aac",
+          "bytes": 235162
+        },
+        {
+          "path": "MPL-2.0.txt",
+          "sha256": "e6b6566f085df5746515c6d7e2edcaec0d2b77d527ac40d91409d783fb6c8508",
+          "bytes": 15550
+        },
+        {
+          "path": "RUST_THIRD_PARTY_NOTICES.txt",
+          "sha256": "b20012c363b34e42e61f90d9b199a22b8a49d5fb428edc9e2f9f8c0ac20bd555",
+          "bytes": 172469
+        },
+        {
+          "path": "RUST_PROVENANCE.json",
+          "sha256": "c71886d14ad59ef246b7fa3f215dff2eed5a7544734a3d74f90cc6abc8615083",
+          "bytes": 8317
+        },
+        {
+          "path": "SWC_GENERATED_NOTICES.txt",
+          "sha256": "be4928745b170ef20c69820d54e8f18f1932754261224bebd962b03339f021c2",
+          "bytes": 328686
+        },
+        {
+          "path": "SOURCE_AVAILABILITY.md",
+          "sha256": "c55ccf034457d74a0fa7cbe8fe7b5f93fd06cb9042967c746a69cacf53b45e45",
+          "bytes": 3571
+        },
+        {
+          "path": "AUDIT.md",
+          "sha256": "b11366106c402416bf608e9b8ce067de066e9ff76411ad1911f0e7b88d5de9f2",
+          "bytes": 8762
+        },
+        {
+          "path": "README.md",
+          "sha256": "e06184f7d5b539f8483a611d945ada9bd2d803a12b696cd4a3421559f4c9e883",
+          "bytes": 2799
+        },
+        {
+          "path": "MAC_CLI_ADDITIONAL_NOTICES.txt",
+          "sha256": "652ab2e6eccfa69d381f296ee6d0e8520fc0d8058041abffedc653f0fc4a1b0b",
+          "bytes": 15111
+        },
+        {
+          "path": "MAC_SOURCE_AVAILABILITY.md",
+          "sha256": "3cc89e1eaf233c14efdd8e6063a05f0e14c449c213e2d8399e6aee7afcdc9d7f",
+          "bytes": 2196
+        },
+        {
+          "path": "MAC_AUDIT.md",
+          "sha256": "41a94a592053d354c135af6ec116da74b10e62475e76ee0511edfd789c0d2d00",
+          "bytes": 4177
+        }
+      ],
+      "approvalScope": "Artifact-specific license-review candidate gate only; NOT final application release authorization or legal certification. Runtime must verify hashes and deliver every noticeFiles member, including sources, before installation/publication.",
+      "integrationVerification": {
+        "status": "pending-native-mac-runtime-and-signed-app",
+        "finalApplicationReleaseApproved": false,
+        "required": [
+          "Match exact executable hashes",
+          "Package and copy all noticeFiles including nested sources unchanged",
+          "Verify notice/source file sizes and SHA-256 after installation",
+          "Keep source-availability instructions accessible and preserve MPL source rights"
+        ]
+      },
+      "residualRisks": [
+        "No byte-reproducible build or independent original linker attestation; same-tag source/lock/binary correspondence and conservative coverage used",
+        "Rust nightly source basis comes from vendored rust-toolchain; exact original compiler invocation not independently attested",
+        "No full OS audit or legal certification; re-review changed artifacts or newly discovered licensing facts"
+      ],
+      "sourceAvailability": {
+        "instructions": "MAC_SOURCE_AVAILABILITY.md",
+        "license": "MPL-2.0.txt",
+        "delivery": "Bundled unmodified source; public fixed-version URLs are additional access paths",
+        "modifications": "Official source unmodified; Apple redistribution signing may change executable signature bytes after pre-sign hash verification. Source rights and bundled source files unchanged.",
+        "sources": [
+          {
+            "component": "smartstring 1.0.1",
+            "path": "sources/smartstring-1.0.1.crate",
+            "url": "https://static.crates.io/crates/smartstring/smartstring-1.0.1.crate",
+            "sha256": "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+          },
+          {
+            "component": "NSS data in Node 24.15.0",
+            "path": "sources/node-v24.15.0-certdata.txt",
+            "url": "https://raw.githubusercontent.com/nodejs/node/v24.15.0/tools/certdata.txt",
+            "sha256": "3b98d4e3ff57a326d9587c33633039c8c3a9cf0b55f7ca581d7598ff329eb1f3"
+          },
+          {
+            "component": "Node generated root certificate header",
+            "path": "sources/node-v24.15.0-node_root_certs.h.txt",
+            "url": "https://raw.githubusercontent.com/nodejs/node/v24.15.0/src/node_root_certs.h",
+            "sha256": "b8381bf64c65982dc9e93e87489e98f25cc660cfe46bd0f53ffaf99154ac6aac"
+          }
+        ]
+      }
+    },
+    "darwin-x64": {
+      "schemaVersion": 1,
+      "reviewDate": "2026-09-11",
+      "policyException": {
+        "approved": true,
+        "scope": "Only previously reviewed shared components plus go-keyring v0.2.8 MIT/Apache notices and the two named MPL exceptions for this exact darwin-x64 Node executable. See MAC_AUDIT.md.",
+        "copyleftExceptionGranted": true,
+        "components": [
+          "Unicode-3.0 and legacy Unicode/ICU notices",
+          "Zlib",
+          "BlueOak-1.0.0 minimatch",
+          "V8 Python/PSF historical license bundle",
+          "SipHash CC0-1.0",
+          "SQLite/ICU TZ and identified Go public-domain material",
+          "ICU IPADIC",
+          "Sun fdlibm",
+          "MPL: smartstring 1.0.1 in Node 24.15.0 darwin-x64 only",
+          "MPL: NSS-derived root certificate data in Node 24.15.0 darwin-x64 only"
+        ],
+        "excluded": [
+          "GPL",
+          "AGPL",
+          "SSPL",
+          "All MPL components except the two exact entries in copyleftExceptions",
+          "Other unapproved copyleft",
+          "Unknown components or changed artifact hashes"
+        ],
+        "copyleftExceptions": [
+          {
+            "artifact": "node",
+            "executableSha256": "2a249a6a7015b0555c3448a77d226c1f3c8f62bd133d89044a2e1518cd16c4b3",
+            "component": "smartstring",
+            "version": "1.0.1",
+            "license": "MPL-2.0+",
+            "sourcePath": "sources/smartstring-1.0.1.crate"
+          },
+          {
+            "artifact": "node",
+            "executableSha256": "2a249a6a7015b0555c3448a77d226c1f3c8f62bd133d89044a2e1518cd16c4b3",
+            "component": "NSS-derived root certificate data",
+            "version": "Node v24.15.0 tagged certdata and generated header",
+            "license": "MPL-2.0",
+            "sourcePath": "sources/node-v24.15.0-certdata.txt"
+          }
+        ]
+      },
+      "releaseApproved": true,
+      "engineeringClosureComplete": true,
+      "blockers": [],
+      "artifacts": {
+        "node": {
+          "version": "24.15.0",
+          "platform": "darwin-x64",
+          "executableSha256": "2a249a6a7015b0555c3448a77d226c1f3c8f62bd133d89044a2e1518cd16c4b3",
+          "noticeFiles": [
+            "NODE_LICENSE.txt",
+            "NODE_ADDITIONAL_NOTICES.txt",
+            "SWC_THIRD_PARTY_NOTICES.txt",
+            "UNICODE_NOTICES.txt",
+            "RUST_THIRD_PARTY_NOTICES.txt",
+            "SWC_GENERATED_NOTICES.txt",
+            "MPL-2.0.txt",
+            "SOURCE_AVAILABILITY.md",
+            "sources/smartstring-1.0.1.crate",
+            "sources/node-v24.15.0-certdata.txt",
+            "sources/node-v24.15.0-node_root_certs.h.txt",
+            "MAC_SOURCE_AVAILABILITY.md"
+          ],
+          "archiveSha256": "ffd5ee293467927f3ee731a553eb88fd1f48cf74eebc2d74a6babe4af228673b"
+        },
+        "cli": {
+          "version": "1.0.93",
+          "platform": "darwin-amd64",
+          "archiveSha256": "bf37861ce5b5fb10c093ffd8b7305f2a80349280cf32563267c29f81cb864e53",
+          "executableSha256": "8264bb7982df6c4f89ddea5635f7986352d371fb09a33fad5bf3352caa24f9ba",
+          "noticeFiles": [
+            "CLI_THIRD_PARTY_NOTICES.txt",
+            "UNICODE_NOTICES.txt",
+            "MAC_CLI_ADDITIONAL_NOTICES.txt",
+            "MAC_SOURCE_AVAILABILITY.md"
+          ]
+        }
+      },
+      "files": [
+        {
+          "path": "NODE_LICENSE.txt",
+          "sha256": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18",
+          "bytes": 156926
+        },
+        {
+          "path": "UNICODE_NOTICES.txt",
+          "sha256": "572fb7f13ac827da9a264e67103813a5e643996577e6ff6e0d3975f556e36f52",
+          "bytes": 5347
+        },
+        {
+          "path": "CLI_THIRD_PARTY_NOTICES.txt",
+          "sha256": "348fbc5447e6ee2e0a0063a849b77ca1157fc1550337fa7ddb4e79b8cd6491f7",
+          "bytes": 122288
+        },
+        {
+          "path": "NODE_ADDITIONAL_NOTICES.txt",
+          "sha256": "02919e95631ba3297e500f6c5691832649c597bf18422ae6d84715d5233f7c9e",
+          "bytes": 86814
+        },
+        {
+          "path": "SWC_THIRD_PARTY_NOTICES.txt",
+          "sha256": "868568b3d43a1282b8558e3e8d40b02bf9dbca8d449abacafe58b55bee453993",
+          "bytes": 1154951
+        },
+        {
+          "path": "components.json",
+          "sha256": "213ab7624e57ab567b8bc85888eec94ed1d3ca4d80ee4e1f6f4bbc2292d20967",
+          "bytes": 82367
+        },
+        {
+          "path": "SWC_PROVENANCE.json",
+          "sha256": "1f77660665cc93bc64df1afa49032106191fc692d188171798b5f6d5c6bcc5be",
+          "bytes": 652
+        },
+        {
+          "path": "DATA_PROVENANCE.json",
+          "sha256": "9715c954945b326feb8f1902e2da3dac0fdff465c3a4aaeed7db48103a7fb3b3",
+          "bytes": 604
+        },
+        {
+          "path": "sources/smartstring-1.0.1.crate",
+          "sha256": "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29",
+          "bytes": 29555
+        },
+        {
+          "path": "sources/node-v24.15.0-certdata.txt",
+          "sha256": "3b98d4e3ff57a326d9587c33633039c8c3a9cf0b55f7ca581d7598ff329eb1f3",
+          "bytes": 1443468
+        },
+        {
+          "path": "sources/node-v24.15.0-node_root_certs.h.txt",
+          "sha256": "b8381bf64c65982dc9e93e87489e98f25cc660cfe46bd0f53ffaf99154ac6aac",
+          "bytes": 235162
+        },
+        {
+          "path": "MPL-2.0.txt",
+          "sha256": "e6b6566f085df5746515c6d7e2edcaec0d2b77d527ac40d91409d783fb6c8508",
+          "bytes": 15550
+        },
+        {
+          "path": "RUST_THIRD_PARTY_NOTICES.txt",
+          "sha256": "b20012c363b34e42e61f90d9b199a22b8a49d5fb428edc9e2f9f8c0ac20bd555",
+          "bytes": 172469
+        },
+        {
+          "path": "RUST_PROVENANCE.json",
+          "sha256": "c71886d14ad59ef246b7fa3f215dff2eed5a7544734a3d74f90cc6abc8615083",
+          "bytes": 8317
+        },
+        {
+          "path": "SWC_GENERATED_NOTICES.txt",
+          "sha256": "be4928745b170ef20c69820d54e8f18f1932754261224bebd962b03339f021c2",
+          "bytes": 328686
+        },
+        {
+          "path": "SOURCE_AVAILABILITY.md",
+          "sha256": "c55ccf034457d74a0fa7cbe8fe7b5f93fd06cb9042967c746a69cacf53b45e45",
+          "bytes": 3571
+        },
+        {
+          "path": "AUDIT.md",
+          "sha256": "b11366106c402416bf608e9b8ce067de066e9ff76411ad1911f0e7b88d5de9f2",
+          "bytes": 8762
+        },
+        {
+          "path": "README.md",
+          "sha256": "e06184f7d5b539f8483a611d945ada9bd2d803a12b696cd4a3421559f4c9e883",
+          "bytes": 2799
+        },
+        {
+          "path": "MAC_CLI_ADDITIONAL_NOTICES.txt",
+          "sha256": "652ab2e6eccfa69d381f296ee6d0e8520fc0d8058041abffedc653f0fc4a1b0b",
+          "bytes": 15111
+        },
+        {
+          "path": "MAC_SOURCE_AVAILABILITY.md",
+          "sha256": "3cc89e1eaf233c14efdd8e6063a05f0e14c449c213e2d8399e6aee7afcdc9d7f",
+          "bytes": 2196
+        },
+        {
+          "path": "MAC_AUDIT.md",
+          "sha256": "41a94a592053d354c135af6ec116da74b10e62475e76ee0511edfd789c0d2d00",
+          "bytes": 4177
+        }
+      ],
+      "approvalScope": "Artifact-specific license-review candidate gate only; NOT final application release authorization or legal certification. Runtime must verify hashes and deliver every noticeFiles member, including sources, before installation/publication.",
+      "integrationVerification": {
+        "status": "pending-native-mac-runtime-and-signed-app",
+        "finalApplicationReleaseApproved": false,
+        "required": [
+          "Match exact executable hashes",
+          "Package and copy all noticeFiles including nested sources unchanged",
+          "Verify notice/source file sizes and SHA-256 after installation",
+          "Keep source-availability instructions accessible and preserve MPL source rights"
+        ]
+      },
+      "residualRisks": [
+        "No byte-reproducible build or independent original linker attestation; same-tag source/lock/binary correspondence and conservative coverage used",
+        "Rust nightly source basis comes from vendored rust-toolchain; exact original compiler invocation not independently attested",
+        "No full OS audit or legal certification; re-review changed artifacts or newly discovered licensing facts"
+      ],
+      "sourceAvailability": {
+        "instructions": "MAC_SOURCE_AVAILABILITY.md",
+        "license": "MPL-2.0.txt",
+        "delivery": "Bundled unmodified source; public fixed-version URLs are additional access paths",
+        "modifications": "Official source unmodified; Apple redistribution signing may change executable signature bytes after pre-sign hash verification. Source rights and bundled source files unchanged.",
+        "sources": [
+          {
+            "component": "smartstring 1.0.1",
+            "path": "sources/smartstring-1.0.1.crate",
+            "url": "https://static.crates.io/crates/smartstring/smartstring-1.0.1.crate",
+            "sha256": "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+          },
+          {
+            "component": "NSS data in Node 24.15.0",
+            "path": "sources/node-v24.15.0-certdata.txt",
+            "url": "https://raw.githubusercontent.com/nodejs/node/v24.15.0/tools/certdata.txt",
+            "sha256": "3b98d4e3ff57a326d9587c33633039c8c3a9cf0b55f7ca581d7598ff329eb1f3"
+          },
+          {
+            "component": "Node generated root certificate header",
+            "path": "sources/node-v24.15.0-node_root_certs.h.txt",
+            "url": "https://raw.githubusercontent.com/nodejs/node/v24.15.0/src/node_root_certs.h",
+            "sha256": "b8381bf64c65982dc9e93e87489e98f25cc660cfe46bd0f53ffaf99154ac6aac"
+          }
+        ]
+      }
+    }
+  },
   "schemaVersion": 1,
   "reviewDate": "2026-09-07",
   "policyException": {

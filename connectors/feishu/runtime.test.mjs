@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, lstat, rm, symlink, link, utimes, rename } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, lstat, rm, symlink, link, utimes, rename, realpath } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
 import { spawn } from 'node:child_process';
@@ -101,7 +101,7 @@ function zip(entries = [{ name: 'lark-cli.exe', bytes: pe() }]) {
 }
 
 async function fixture(t, overrides = {}) {
-  const base = await mkdtemp(path.join(os.tmpdir(), 'feishu-runtime-test-'));
+  const base = await realpath(await mkdtemp(path.join(os.tmpdir(), 'feishu-runtime-test-')));
   t.after(() => rm(base, { recursive: true, force: true }));
   const root = path.join(base, 'TuanTuan', 'feishu');
   const cli = pe();
@@ -184,7 +184,7 @@ async function fixture(t, overrides = {}) {
   const options = { root, env: {}, fetchImpl, spawnImpl, ...overrides.options };
   const settings = { platform: 'win32', arch: 'x64', artifacts, licensesRoot, ...overrides.settings };
   const prepare = createRuntimeProvisionerForTest(options, settings);
-  return { base, root, artifacts, bodies, requests, calls, phases, options, settings,
+  return { base, root, artifacts, bodies, requests, calls, phases, options, settings, bytes: { cli, node },
     licensesRoot, manifest, notices, saveManifest,
     prepare: (args = {}) => prepare({ onPhase: (phase) => phases.push(phase), ...args }),
     native: async (kind, directory = path.join(base, 'native')) => {
@@ -201,6 +201,22 @@ async function noStaging(f) {
   catch (cause) { if (cause.code === 'ENOENT') return; throw cause; }
   assert.ok(files.every((name) => !name.startsWith('.stage-') && name !== '.provision-lock'), files.join(','));
 }
+
+test('a packaged runtime is verified and used without network access', async (t) => {
+  const f = await fixture(t);
+  const bundledRoot = path.join(f.base, 'packaged-runtime');
+  for (const kind of ['cli', 'node']) {
+    const artifact = f.artifacts[kind];
+    const directory = path.join(bundledRoot, artifact.directory);
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, artifact.name), f.bytes[kind]);
+  }
+  const prepare = createRuntimeProvisionerForTest({ ...f.options, bundledRoot }, f.settings);
+  const result = await prepare();
+  assert.equal(result.cliPath, path.join(bundledRoot, f.artifacts.cli.directory, f.artifacts.cli.name));
+  assert.equal(result.nodePath, path.join(bundledRoot, f.artifacts.node.directory, f.artifacts.node.name));
+  assert.equal(f.requests.length, 0);
+});
 
 test('replacement context is host-owned, private and reusable without changing old app files', async (t) => {
   const f = await fixture(t);
@@ -1187,6 +1203,7 @@ test('releasing a replaced lock preserves the replacement owner and unrelated fi
 
 test('production refuses unsupported platforms rather than running downloaded Windows bytes', async () => {
   if (process.platform === 'win32' && process.arch === 'x64') return;
+  if (process.platform === 'darwin' && ['arm64', 'x64'].includes(process.arch)) return;
   const prepare = createRuntimeProvisioner({ root: path.join(os.tmpdir(), 'unused-feishu-root') });
   await assert.rejects(prepare(), /UNSUPPORTED_PLATFORM/);
 });

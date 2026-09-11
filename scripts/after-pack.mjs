@@ -6,6 +6,7 @@ import {
   verifyCloudflaredExecutable,
 } from "./prepare-cloudflared.mjs";
 import { verifyBrowserBundle } from "./prepare-browser.mjs";
+import { verifyFeishuRuntimeBundle } from "./prepare-feishu-runtime.mjs";
 
 async function requireRealDirectory(directory, mode = 0o755) {
   const details = await lstat(directory);
@@ -75,6 +76,10 @@ export default async function afterPack(context) {
       ? path.join(context.appOutDir, "OpenMausBot.app", "Contents", "Resources")
       : path.join(context.appOutDir, "resources")
   );
+  if (context.packager && ['win32', 'darwin'].includes(context.electronPlatformName)) {
+    const { verifyDesktopBuildReceipt } = await import('./desktop-build-receipt.mjs');
+    verifyDesktopBuildReceipt(undefined, { ui: path.join(resources, 'ui'), server: path.join(resources, 'server') });
+  }
   await validateCloudflared(resources, context.electronPlatformName, Boolean(context.packager));
   const browserRoot = path.join(resources, "browser-engine");
   const hasBrowser = await lstat(browserRoot).then(() => true, (error) => {
@@ -87,6 +92,11 @@ export default async function afterPack(context) {
     const arch = { 1: "x64", 3: "arm64" }[context.arch];
     if (!arch) throw new Error(`Unsupported desktop browser package architecture: ${context.arch}`);
     await verifyBrowserBundle(browserRoot, `${context.electronPlatformName}-${arch}`);
+  }
+
+  if (["win32", "darwin"].includes(context.electronPlatformName) && context.packager) {
+    const arch = { 1: "x64", 3: "arm64" }[context.arch];
+    await verifyFeishuRuntimeBundle(path.join(resources, "tuantuan-feishu-runtime"), `${context.electronPlatformName}-${arch}`);
   }
 
   if (context.electronPlatformName !== "linux") return;

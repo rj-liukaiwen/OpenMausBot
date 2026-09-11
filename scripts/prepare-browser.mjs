@@ -85,8 +85,12 @@ export function verifyBundleInventory(directory, files) {
 }
 
 /** Called before signing; Developer ID signing necessarily changes Mach-O bytes. */
-export function verifyBrowserBundle(directory, target) {
+export function verifyBrowserBundle(directory, target, { candidateSpec } = {}) {
   const spec = browserBundleSpec(target);
+  if (candidateSpec) {
+    if (target !== 'win32-x64' || candidateSpec.candidate !== true) throw new Error('Invalid candidate verification mode');
+    Object.assign(spec, candidateSpec);
+  }
   const paths = browserBundlePaths(directory, target);
   if (!lstatSync(directory).isDirectory() || lstatSync(directory).isSymbolicLink()) throw new Error("Browser bundle must be a real directory");
   regularFile(paths.manifest);
@@ -109,6 +113,9 @@ export async function releaseBytes(asset, cacheDirectory) {
     const bytes = readFileSync(cached);
     verifyAssetBytes(bytes, asset);
     return bytes;
+  }
+  if (asset.url?.startsWith("local:")) {
+    throw new Error(`Missing pinned local dependency ${asset.asset}. Supply the reviewed vendor directory through OMB_BROWSER_VENDOR_DIR; no older engine will be downloaded.`);
   }
   const response = await fetch(asset.url, { signal: AbortSignal.timeout(600_000), redirect: "follow" });
   if (!response.ok) throw new Error(`Could not download ${asset.asset}: HTTP ${response.status}`);
@@ -144,6 +151,24 @@ function extract(archive, directory) {
   if (result.error || result.status !== 0) throw new Error(`Browser archive extraction failed: ${result.error?.message ?? result.stderr ?? result.status}`);
 }
 
+/** Preview execution may add Chromium's known Windows diagnostic log. Archive
+ * only that extra regular file, only when EVERY shipped entry still matches.
+ * Package verification remains strict; never add runtime output to its manifest. */
+export function archiveBrowserRuntimeLog(directory, files, archiveDirectory) {
+  const logPath = 'chrome/chrome-headless-shell-win64/debug.log';
+  const actual = bundleInventory(directory);
+  const extra = actual.find((entry) => entry.path === logPath);
+  if (!extra || extra.kind !== 'file' || !Array.isArray(files)
+      || JSON.stringify(actual.filter((entry) => entry.path !== logPath)) !== JSON.stringify(files)) return null;
+  const source = join(directory, logPath);
+  if (lstatSync(source).nlink !== 1) throw new Error('Refusing to archive a linked browser runtime log');
+  mkdirSync(archiveDirectory, { recursive: true });
+  const archive = join(mkdtempSync(join(archiveDirectory, 'chrome-log-')), 'debug.log');
+  renameSync(source, archive);
+  verifyBundleInventory(directory, files);
+  return archive;
+}
+
 export async function renameWithWindowsRetry(source, destination, {
   platform = process.platform,
   rename = renameSync,
@@ -163,15 +188,37 @@ export async function renameWithWindowsRetry(source, destination, {
   }
 }
 
-export async function stageBrowserTarget(root, target, { cacheDirectory = process.env.OMB_BROWSER_ARCHIVE_DIR ?? join(root, "dist-native", "browser-archives") } = {}) {
+export async function stageBrowserTarget(root, target, {
+  cacheDirectory = process.env.OMB_BROWSER_ARCHIVE_DIR ?? join(root, "dist-native", "browser-archives"),
+  // Vendor-workflow-only staging. Candidate manifests are deliberately not
+  // accepted by normal afterPack/release verification, even for equal bytes.
+  candidateDirectory,
+} = {}) {
   const spec = browserBundleSpec(target);
+  if (candidateDirectory && target !== 'win32-x64') throw new Error('Vendor candidates are Windows-only');
   const parent = join(root, "dist-native", "browser");
   mkdirSync(parent, { recursive: true });
   const scratch = mkdtempSync(join(parent, `.prepare-${target}-`));
   const stage = join(scratch, "bundle");
-  const destination = join(parent, target);
+  const destination = join(parent, candidateDirectory ? `${target}-candidate` : target);
   try {
-    const [engine, chrome] = await Promise.all([releaseBytes(spec.engine, cacheDirectory), releaseBytes(spec.chrome, cacheDirectory)]);
+    const engineBytes = async () => {
+      if (!spec.engine.url.startsWith("local:")) return releaseBytes(spec.engine, cacheDirectory);
+      const directory = resolve(candidateDirectory ?? process.env.OMB_BROWSER_VENDOR_DIR ?? join(root, "dist-native", "browser-vendor-candidate-omb2"));
+      const binary = join(directory, "agent-browser-win32-x64.exe");
+      if (!existsSync(binary)) return releaseBytes(spec.engine, cacheDirectory);
+      regularFile(binary);
+      const bytes = readFileSync(binary);
+      const { verifyVendorCandidate } = await import("./build-windows-browser-vendor.mjs");
+      verifyVendorCandidate(JSON.parse(readFileSync(join(directory, "provenance.json"), "utf8")), bytes);
+      if (candidateDirectory) {
+        spec.engine.bytes = bytes.length; spec.engine.sha256 = sha256(bytes);
+        spec.candidate = true;
+      }
+      verifyAssetBytes(bytes, spec.engine);
+      return bytes;
+    };
+    const [engine, chrome] = await Promise.all([engineBytes(), releaseBytes(spec.chrome, cacheDirectory)]);
     mkdirSync(join(stage, "chrome"), { recursive: true });
     const paths = browserBundlePaths(stage, target);
     writeFileSync(paths.engine, engine, { mode: 0o755 });
@@ -185,7 +232,7 @@ export async function stageBrowserTarget(root, target, { cacheDirectory = proces
     mkdirSync(paths.licenses);
     for (const name of BROWSER_LICENSE_FILES) copyFileSync(join(sourceRoot, "third_party", "browser", name), join(paths.licenses, name));
     writeFileSync(paths.manifest, `${JSON.stringify({ ...spec, files: bundleInventory(stage) }, null, 2)}\n`);
-    verifyBrowserBundle(stage, target);
+    verifyBrowserBundle(stage, target, candidateDirectory ? { candidateSpec: spec } : {});
     // Keep the previous complete tree until the new one passes every check.
     const previous = join(scratch, "previous");
     if (existsSync(destination)) await renameWithWindowsRetry(destination, previous);

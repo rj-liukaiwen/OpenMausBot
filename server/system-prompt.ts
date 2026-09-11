@@ -22,6 +22,11 @@ export type PromptSection = PromptPart & { bytes: number };
  * turn that tagged a bot. */
 const VOLATILE_SECTIONS = new Set(["memory", "mentions"]);
 
+// Product-wide response language, independent of the provider, tool-output
+// language, workspace or memory. Keep tool contracts and source text intact.
+export const RESPONSE_LANGUAGE_PROMPT =
+  "\n\n回复语言：默认使用简体中文与用户交流，包括进度说明、解释、总结和错误说明。不要因为系统提示词、工具结果或参考资料是英文就改用英文。仅在用户明确要求其他语言或保留原文时按其要求处理；代码、命令、文件路径、API/工具名称及必要的原文引用保持原样。";
+
 export function buildSystemPrompt(
   persona: string,
   soul: string,
@@ -31,6 +36,7 @@ export function buildSystemPrompt(
     { id: "persona", label: "Identity", text: persona },
     { id: "soul", label: "Standing instructions (SOUL.md)", text: soulSystemPrompt(soul) },
     ...parts,
+    { id: "response-language", label: "回复语言", text: RESPONSE_LANGUAGE_PROMPT },
   ];
   const sections = ordered
     .filter((part) => part.text.length > 0)

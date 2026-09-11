@@ -24,11 +24,16 @@ export async function navigateBrowserPage(binary: string, env: NodeJS.ProcessEnv
     || !endpoint.port || endpoint.username || endpoint.password) throw new Error("Invalid native browser endpoint");
   const { tabs } = await query(["tab", "list"]);
   const active = Array.isArray(tabs) ? tabs.filter((tab) => tab.active === true) : [];
-  if (active.length !== 1 || typeof active[0].targetId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(active[0].targetId)) throw new Error("No unique active browser target");
+  if (active.length !== 1 || typeof active[0].targetId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(active[0].targetId)
+      || typeof active[0].tabId !== 'string' || !/^t[1-9]\d{0,8}$/.test(active[0].tabId)) throw new Error("No unique active browser target");
   const socket = new WebSocket(endpoint);
   let nextId = 0;
+  let pageSession = '';
+  const loaded = new Set<string>();
+  let documentWait: { loaderId: string; resolve: () => void; reject: (error: Error) => void; timer: NodeJS.Timeout } | undefined;
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
   const fail = () => {
+    if (documentWait) { clearTimeout(documentWait.timer); documentWait.reject(new Error('Browser navigation connection ended')); documentWait = undefined; }
     for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error("Browser navigation connection ended")); }
     pending.clear();
   };
@@ -36,7 +41,17 @@ export async function navigateBrowserPage(binary: string, env: NodeJS.ProcessEnv
     if (typeof event.data !== "string" || event.data.length > 262144) return;
     let message;
     try { message = JSON.parse(event.data); } catch { return; }
-    if (!message || typeof message !== "object" || !Number.isInteger(message.id)) return;
+    if (!message || typeof message !== "object") return;
+    if (message.method === 'Page.lifecycleEvent' && message.sessionId === pageSession
+        && ['DOMContentLoaded', 'load'].includes(message.params?.name) && typeof message.params?.loaderId === 'string') {
+      const loaderId = message.params.loaderId;
+      if (loaded.size < 32) loaded.add(loaderId);
+      const waiting = documentWait;
+      if (waiting && waiting.loaderId === loaderId) {
+        clearTimeout(waiting.timer); waiting.resolve(); documentWait = undefined;
+      }
+    }
+    if (!Number.isInteger(message.id)) return;
     const item = pending.get(message.id);
     if (!item) return;
     pending.delete(message.id); clearTimeout(item.timer);
@@ -60,15 +75,35 @@ export async function navigateBrowserPage(binary: string, env: NodeJS.ProcessEnv
     });
     const { sessionId } = await rpc("Target.attachToTarget", { targetId: active[0].targetId, flatten: true });
     if (typeof sessionId !== "string") throw new Error("Browser target attachment failed");
+    pageSession = sessionId;
+    await rpc('Page.enable', {}, sessionId);
+    await rpc('Page.setLifecycleEventsEnabled', { enabled: true }, sessionId);
     await rpc("Page.stopLoading", {}, sessionId);
-    let result;
-    try { result = await rpc("Page.navigate", { url }, sessionId, 15_000); }
+    let result: { loaderId?: string; errorText?: string };
+    const deadline = Date.now() + 15_000;
+    try {
+      result = await rpc("Page.navigate", { url }, sessionId, 15_000);
+      // Page.navigate acknowledges the request before the new document is
+      // usable. Match its loader, never a late event from the previous page.
+      if (!result?.errorText && typeof result?.loaderId === 'string' && !loaded.has(result.loaderId)) {
+        const loaderId = result.loaderId;
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => { documentWait = undefined; reject(new Error('Browser document load timed out')); }, Math.max(1, deadline - Date.now()));
+          documentWait = { loaderId, resolve, reject, timer };
+        });
+      }
+    }
     catch {
       // Only a confirmed browser-side stop makes this a completed failure.
       await rpc("Page.stopLoading", {}, sessionId);
       throw pageFailure();
     }
     if (result?.errorText) throw pageFailure();
+    // tab list returns cached metadata. Re-select the SAME trusted native tab
+    // to read its actual document title/URL into the daemon and broadcast it.
+    // This does not navigate twice or create a tab; the human-action lease
+    // prevents another caller switching the active target during this action.
+    await query(['tab', active[0].tabId]);
     return { url };
   } finally {
     fail(); socket.close();

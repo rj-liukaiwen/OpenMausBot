@@ -33,6 +33,7 @@ async function boundedJson(response: Response): Promise<unknown> {
 export async function browserProxyRequest(
   frame: unknown,
   connection: { url: string; token: string },
+  signal?: AbortSignal,
 ): Promise<unknown | undefined> {
   if (!frame || typeof frame !== "object" || Array.isArray(frame)) return failure(null, null, "Invalid request.", -32600);
   const message = frame as { id?: RpcId; jsonrpc?: unknown; method?: unknown; params?: unknown };
@@ -55,7 +56,7 @@ export async function browserProxyRequest(
     const response = await fetch(new URL("/api/internal/browser/mcp", url), {
       method: "POST", redirect: "error",
       headers: { "content-type": "application/json", authorization: `Bearer ${connection.token}` },
-      body, signal: AbortSignal.timeout(130_000),
+      body, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(130_000)]) : AbortSignal.timeout(130_000),
     });
     const payload = await boundedJson(response) as { result?: unknown; error?: unknown };
     if (!response.ok || !payload || typeof payload !== "object" || !Object.hasOwn(payload, "result")) {

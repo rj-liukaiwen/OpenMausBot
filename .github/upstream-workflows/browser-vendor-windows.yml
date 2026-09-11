@@ -12,6 +12,8 @@ on:
       - scripts/build-windows-browser-vendor.test.mjs
       - scripts/smoke-browser-bundle.mjs
       - third_party/browser/agent-browser-windows-stdio.patch
+      - third_party/browser/agent-browser-windows-no-console.patch
+      - scripts/verify-browser-no-console.ps1
 
 permissions:
   contents: read
@@ -67,11 +69,14 @@ jobs:
           name: windows-browser-vendor
           path: ${{ runner.temp }}/browser-vendor
       - name: Stage the pinned Chromium and notices
-        run: node scripts/prepare-browser.mjs --current
+        shell: pwsh
+        env:
+          OMB_BROWSER_VENDOR_DIR: ${{ runner.temp }}/browser-vendor
+        run: node --input-type=module -e 'import {stageBrowserTarget} from "./scripts/prepare-browser.mjs"; await stageBrowserTarget(process.cwd(), "win32-x64", {candidateDirectory:process.env.OMB_BROWSER_VENDOR_DIR});'
       - name: Prove cold start and close/reopen with captured MCP output
         shell: pwsh
         run: |
           $resources = "$env:RUNNER_TEMP/browser-vendor-resources"
           New-Item -ItemType Directory -Path $resources | Out-Null
-          Copy-Item -Recurse "$env:GITHUB_WORKSPACE/dist-native/browser/win32-x64" "$resources/browser-engine"
+          Copy-Item -Recurse "$env:GITHUB_WORKSPACE/dist-native/browser/win32-x64-candidate" "$resources/browser-engine"
           node scripts/smoke-browser-bundle.mjs --resources "$resources" --engine-candidate "$env:RUNNER_TEMP/browser-vendor/agent-browser-win32-x64.exe"

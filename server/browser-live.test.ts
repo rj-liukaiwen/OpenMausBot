@@ -95,6 +95,16 @@ async function open({ botId = "bot-a", session = "profile-a", owner = "admin-a",
 }
 
 describe("browser viewer protocol boundary", () => {
+  it.each([undefined, "7300"])("keeps the agent's daemon timeout fingerprint unchanged (%s)", async (timeout) => {
+    const res = new ResponseFixture();
+    const env = { AGENT_BROWSER_SESSION: "profile-a", ...(timeout ? { AGENT_BROWSER_DEFAULT_TIMEOUT: timeout } : {}) };
+    await live.open({ botId: "bot-a", session: "profile-a", owner: "admin-a", isCurrent: () => true,
+      res: res as unknown as ServerResponse, spec: { command: "/trusted/agent-browser", env } });
+    expect(execute).toHaveBeenCalled();
+    for (const [, , options] of execute.mock.calls) {
+      expect(options.env.AGENT_BROWSER_DEFAULT_TIMEOUT).toBe(timeout);
+    }
+  });
   it.each(["console", "command", "result", "chat", "unknown"])("drops %s messages, including their private payloads", (type) => {
     expect(normalizeBrowserLiveMessage({ type, data: "secret", params: { password: "secret" } })).toBeNull();
   });
@@ -372,6 +382,26 @@ describe("authenticated browser viewer relay", () => {
     expect(JSON.parse(nativeInput.mock.calls[0]![1].body)).toEqual({ action: "press", key: "Enter" });
     await a.action({ type: "release" });
     await expect(runtime.withAgentAction("profile-a", async () => true)).rejects.toThrow("Restart");
+  });
+  it('delivers the latest tab metadata after a large frame temporarily fills the SSE buffer', async () => {
+    const a = await open();
+    a.res.backpressure = true;
+    a.socket.receive(frame);
+    a.socket.receive({ type: 'tabs', tabs: [{ tabId: 't1', title: 'Old title', url: 'https://example.com/old', active: true }] });
+    a.socket.receive({ type: 'tabs', tabs: [{ tabId: 't1', title: 'Loaded page', url: 'https://example.com/new', active: true }] });
+    a.socket.receive({ type: 'url', url: 'https://example.com/new' });
+    expect(a.res.events('tabs')).toHaveLength(0);
+    a.res.backpressure = false; a.res.emit('drain');
+    expect(a.res.events('tabs')).toEqual([{ tabs: [{ tabId: 't1', title: 'Loaded page', url: 'https://example.com/new', active: true }] }]);
+    expect(a.res.events('url')).toEqual([{ url: 'https://example.com/new' }]);
+  });
+  it('does not flush queued tab metadata to a viewer after another viewer takes control', async () => {
+    const a = await open(), b = await open({ botId: 'bot-b' });
+    a.res.backpressure = true; a.socket.receive(frame);
+    a.socket.receive({ type: 'tabs', tabs: [{ tabId: 't1', title: 'Private page', url: 'https://example.com/', active: true }] });
+    await b.action({ type: 'take' });
+    a.res.backpressure = false; a.res.emit('drain');
+    expect(a.res.events('tabs')).toHaveLength(0);
   });
   it("keeps control usable after a confirmed navigation cancellation", async () => {
     runtime = new BrowserRuntime(); live = new BrowserLive({ runtime });

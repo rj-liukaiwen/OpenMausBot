@@ -84,3 +84,38 @@ Fixture cleanup must address its exact UUID session, never `close --all`: some
 Windows native builds resolve the OS profile even when HOME is overridden.
 
 See [the September 10 regression evidence](ruijie-browser-delete-2026-09-10.md).
+
+## Viewer / agent handoff without daemon restarts
+
+Run both orders with the explicit native binary and Chrome variables above:
+
+```sh
+node --experimental-strip-types scripts/verify-browser-runtime-lifecycle.ts --viewer-first
+node --experimental-strip-types scripts/verify-browser-runtime-lifecycle.ts
+```
+
+Each isolated fixture watches real page frames, performs three human-navigation /
+MCP handoffs, and waits for a heartbeat after MCP idle cleanup. The **original**
+stream must remain open. Native daemon configuration includes
+`AGENT_BROWSER_DEFAULT_TIMEOUT`; viewer-only overrides restart the shared daemon
+when tools next run. Keep launch configuration identical and enforce operation
+deadlines outside it. Do not add an override to the test's agent environment that
+the production agent does not receive.
+
+On Windows, also run the compiled desktop fixture (no installer is generated):
+
+```sh
+node node_modules/electron/cli.js scripts/verify-desktop-browser.mjs
+```
+
+It copies `dist` / `dist-server` outside the checkout, starts Electron's real
+utility server in a disposable home, opens the real BrowserPanel, and searches
+through native MCP. Three toolbar take/reload/return cycles must allow the agent
+to read the page again, then the same SSE connection must survive 60 seconds.
+Network instrumentation rejects silent reconnections and requires multiple
+frames; an opening screenshot alone cannot pass. Evidence lives in the printed
+fixture directory (`server.log`, `verification.json`, and a failure screenshot
+when applicable). `OMB_VERIFY_SERVER_ENTRY` can explicitly substitute an isolated
+candidate bundle for diagnosis, but that is not acceptance of the running
+desktop build or the final installer. This fixture does not call a live model,
+use real accounts, or prove macOS signing/installation behavior.

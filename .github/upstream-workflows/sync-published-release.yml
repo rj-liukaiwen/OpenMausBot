@@ -45,23 +45,24 @@ jobs:
           # npm attaches its lowercase tarball independently after publishing.
           # The legacy updater bridge mirrors only the desktop/feed assets.
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets \
-            --pattern '*.yml' --pattern 'OpenMausBot*' --pattern 'SHA256SUMS-ubuntu-x64.txt'
+            --pattern '*.yml' --pattern 'OpenMausBot*' --pattern 'RuijieBot*' --pattern 'SHA256SUMS-ubuntu-x64.txt'
           required=(
             latest-linux.yml latest-mac.yml latest.yml
             "OpenMausBot-$version-amd64.deb"
-            "OpenMausBot-$version-arm64.dmg"
-            "OpenMausBot-$version-arm64.dmg.blockmap"
-            "OpenMausBot-$version-arm64.zip"
-            "OpenMausBot-$version-arm64.zip.blockmap"
-            "OpenMausBot-$version-setup.exe"
-            "OpenMausBot-$version-setup.exe.blockmap"
-            "OpenMausBot-$version-x64.dmg"
-            "OpenMausBot-$version-x64.dmg.blockmap"
-            "OpenMausBot-$version-x64.zip"
-            "OpenMausBot-$version-x64.zip.blockmap"
+            "RuijieBot-$version-mac-arm64.dmg"
+            "RuijieBot-$version-mac-arm64.dmg.blockmap"
+            "RuijieBot-$version-mac-arm64.zip"
+            "RuijieBot-$version-mac-arm64.zip.blockmap"
+            "RuijieBot-$version-setup.exe"
+            "RuijieBot-$version-setup.exe.blockmap"
+            "RuijieBot-$version-mac-x64.dmg"
+            "RuijieBot-$version-mac-x64.dmg.blockmap"
+            "RuijieBot-$version-mac-x64.zip"
+            "RuijieBot-$version-x64.zip"
+            "RuijieBot-$version-mac-x64.zip.blockmap"
             "OpenMausBot-$version-x86_64.AppImage"
-            OpenMausBot-amd64.deb OpenMausBot-intel.dmg OpenMausBot-setup.exe
-            OpenMausBot.AppImage OpenMausBot.dmg SHA256SUMS-ubuntu-x64.txt
+            RuijieBot-amd64.deb RuijieBot-intel.dmg RuijieBot-setup.exe
+            OpenMausBot.AppImage RuijieBot.dmg SHA256SUMS-ubuntu-x64.txt
           )
           for file in "${required[@]}"; do
             test -s "assets/$file" || { echo "::error::$TAG is missing $file"; exit 1; }
@@ -80,12 +81,12 @@ jobs:
           const sha512 = (file) => createHash("sha512").update(readFileSync(file)).digest("base64");
           const expected = new Map([
             ["latest-mac.yml", [
-              `OpenMausBot-${version}-x64.zip`,
-              `OpenMausBot-${version}-arm64.zip`,
-              `OpenMausBot-${version}-x64.dmg`,
-              `OpenMausBot-${version}-arm64.dmg`,
+              `RuijieBot-${version}-mac-x64.zip`,
+              `RuijieBot-${version}-mac-arm64.zip`,
+              `RuijieBot-${version}-mac-x64.dmg`,
+              `RuijieBot-${version}-mac-arm64.dmg`,
             ]],
-            ["latest.yml", [`OpenMausBot-${version}-setup.exe`]],
+            ["latest.yml", [`RuijieBot-${version}-setup.exe`]],
             ["latest-linux.yml", [
               `OpenMausBot-${version}-x86_64.AppImage`,
               `OpenMausBot-${version}-amd64.deb`,

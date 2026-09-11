@@ -10,6 +10,7 @@ import {
   requiresAccountAlias,
   onlyLatestConnectorResponses,
   shouldShowStaleConnectorWarning,
+  shouldRecoverConnectedApps,
   type ConnectorStatus,
 } from "./PluginsPanel";
 import { managedConnectorUnavailableReason } from "../../shared/connector-availability";
@@ -25,6 +26,12 @@ describe("connected-app remote permissions", () => {
 });
 
 describe("connected-app status races", () => {
+  it("keeps recovering stale inventory even after registration has succeeded", () => {
+    expect(shouldRecoverConnectedApps(true, true, "ready")).toBe(true);
+    expect(shouldRecoverConnectedApps(true, false, "error")).toBe(true);
+    expect(shouldRecoverConnectedApps(false, false, "ready")).toBe(true);
+    expect(shouldRecoverConnectedApps(true, false, "ready")).toBe(false);
+  });
   it("offers status recovery for a pending authorization whose URL was lost on remount", () => {
     for (const hasAccounts of [false, true]) {
       expect(connectorActionLabel("ready", {

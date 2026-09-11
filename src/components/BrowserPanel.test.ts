@@ -8,6 +8,8 @@ const fixture = vi.hoisted(() => ({
   refs: [] as RefObject<unknown>[],
   control: { held: false, controlling: false, owned: false },
   frame: null as { seq: number; data: string } | null,
+  error: "",
+  stringStates: 0,
   queues: [] as Array<{ enqueue: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn>; drain: ReturnType<typeof vi.fn> }>,
 }));
 vi.mock("react", async (importOriginal) => {
@@ -15,7 +17,7 @@ vi.mock("react", async (importOriginal) => {
   return { ...react,
     useEffect: (effect: EffectCallback) => { fixture.effects.push(effect); },
     useRef: (value: unknown) => { const ref = react.useRef(value); fixture.refs.push(ref); return ref; },
-    useState: (value: unknown) => react.useState(value === null ? fixture.frame : value && typeof value === "object" && "controlling" in value ? fixture.control : value),
+    useState: (value: unknown) => react.useState(value === "" && ++fixture.stringStates === 2 ? fixture.error : value === null ? fixture.frame : value && typeof value === "object" && "controlling" in value ? fixture.control : value),
   };
 });
 vi.mock("@/state/store", () => ({ api: vi.fn().mockResolvedValue({}), useStore: () => ({ state: { config: { browserProfiles: [] } } }) }));
@@ -45,12 +47,48 @@ beforeEach(() => {
   fixture.effects = []; fixture.refs = []; fixture.queues = [];
   fixture.control = { held: false, controlling: false, owned: false };
   fixture.frame = null;
+  fixture.error = ""; fixture.stringStates = 0;
   FixtureEventSource.instances = [];
   vi.stubGlobal("EventSource", FixtureEventSource);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("live browser connection lifecycle", () => {
+  it("bounds transient view retries and never retains input authority", () => {
+    vi.useFakeTimers();
+    render();
+    const connect = fixture.effects[2]!;
+    for (const delay of [1000, 2000, 5000, undefined]) {
+      const cleanup = connect();
+      const source = FixtureEventSource.instances.at(-1)!;
+      source.emit('ready', { viewerId: 'transient-view' });
+      const viewer = fixture.refs.find((ref) => ref.current === 'transient-view')!;
+      source.emit('error', { message: 'transient', retryable: true });
+      expect(viewer.current).toBe('');
+      expect(fixture.queues.at(-1)!.clear).toHaveBeenCalledOnce();
+      expect(fixture.queues.at(-1)!.enqueue).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(delay === undefined ? 0 : 1);
+      if (delay) vi.advanceTimersByTime(delay);
+      cleanup?.();
+    }
+  });
+  it("does not retry a denial and cancels scheduled retries when the panel closes", () => {
+    vi.useFakeTimers(); render();
+    const connect = fixture.effects[2]!;
+    const firstCleanup = connect();
+    FixtureEventSource.instances.at(-1)!.emit('error', { message: 'access denied' });
+    expect(vi.getTimerCount()).toBe(0); firstCleanup?.();
+    const cleanup = connect();
+    FixtureEventSource.instances.at(-1)!.emit('error', { message: 'transient', retryable: true });
+    expect(vi.getTimerCount()).toBe(1); cleanup?.();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("does not claim to be connecting after a terminal connection error", () => {
+    fixture.error = "Connection ended";
+    const html = render();
+    expect(html).toContain('placeholder="Browser disconnected"');
+    expect(html).not.toContain('placeholder="Connecting…"');
+  });
   it("does not let an old source error discard the replacement viewer or input queue", () => {
     render();
     // Replay the real connection effect's cleanup/setup, as on reconnect or

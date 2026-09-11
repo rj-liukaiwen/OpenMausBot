@@ -1,6 +1,7 @@
 /* eslint-disable no-control-regex -- Reject controls at the browser boundary. */
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createFeishuSignatureVerifier } from './feishu-mac-signature.mjs';
 
 function isFeishuAuthorizationUrl(value) {
   if (typeof value !== 'string' || value.length > 4096 || /[\x00-\x20\x7f\\#]/.test(value)) return false;
@@ -40,7 +41,7 @@ export async function awaitFeishuShutdown(close) {
 }
 
 // The owner capability stays in this trusted host; MCP only gets its narrow tool token.
-export function registerFeishu({ ipcMain, localOnly, runtime, resources, runtimeRoot, credentials,
+export function registerFeishu({ ipcMain, localOnly, runtime, resources, runtimeRoot, bundledRuntimeRoot, credentials,
   saveCredentials, dialog, openExternal, window: getWindow, load = (url) => import(url) }) {
   let connector;
   let loading;
@@ -49,21 +50,22 @@ export function registerFeishu({ ipcMain, localOnly, runtime, resources, runtime
   const unavailable = () => ({ supported: false, cliPath: '', nodePath: '', botId: '',
     im: 'off', toolsEnabled: false, userAuthorized: false, botAuthorized: false });
   const expectedRendererOrigin = (host) => host.rendererOrigin ?? host.baseUrl;
+  const supportedHost = (host) => ['win32', 'darwin'].includes(host.platform);
   function trusted(event) {
     const host = runtime();
     const win = getWindow();
-    if (closed || host.platform !== 'win32' || !host.packaged || host.remote || host.stopping ||
+    if (closed || !supportedHost(host) || !host.packaged || host.remote || host.stopping ||
         !host.ready || !host.pid || !win || win.isDestroyed() ||
         event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame ||
         new URL(win.webContents.getURL()).origin !== expectedRendererOrigin(host)) {
-      throw new Error('\u98de\u4e66\u8fde\u63a5\u4ec5\u53ef\u5728 Windows \u672c\u673a\u5ba2\u6237\u7aef\u7ba1\u7406');
+      throw new Error('飞书连接仅可在 Windows 或 macOS 本机客户端管理');
     }
     return host;
   }
   function currentWindow() {
     const host = runtime();
     const win = getWindow();
-    if (closed || host.platform !== 'win32' || !host.packaged || host.remote || host.stopping || !host.ready || !host.pid ||
+    if (closed || !supportedHost(host) || !host.packaged || host.remote || host.stopping || !host.ready || !host.pid ||
         !win || win.isDestroyed() || new URL(win.webContents.getURL()).origin !== expectedRendererOrigin(host)) {
       throw new Error('LOCAL_WINDOW_REQUIRED');
     }
@@ -84,7 +86,11 @@ export function registerFeishu({ ipcMain, localOnly, runtime, resources, runtime
       currentWindow();
       const fresh = runtime();
       if (host.pid !== fresh.pid || host.baseUrl !== fresh.baseUrl || host.token !== fresh.token) throw new Error('KERNEL_CHANGED');
-      const prepare = createRuntimeProvisioner({ root: runtimeRoot });
+      const prepare = createRuntimeProvisioner({ root: runtimeRoot, bundledRoot: bundledRuntimeRoot,
+        ...(host.platform === 'darwin' && bundledRuntimeRoot ? {
+          verifySignedBundle: createFeishuSignatureVerifier(path.dirname(bundledRuntimeRoot)),
+        } : {}),
+      });
       const value = createConnector({
         kernel: createKernel({ baseUrl: host.baseUrl, ownerToken: host.token, expectedPid: host.pid }),
         store: {
@@ -112,8 +118,9 @@ export function registerFeishu({ ipcMain, localOnly, runtime, resources, runtime
         },
         chooseExecutable: async (kind) => {
           const result = await dialog.showOpenDialog(currentWindow(), {
-            title: kind === 'cli' ? '\u9009\u62e9\u5b98\u65b9 lark-cli.exe' : '\u9009\u62e9 Node.js 24 \u6216\u66f4\u65b0\u7248\u672c\u7684 node.exe',
-            properties: ['openFile'], filters: [{ name: '\u53ef\u6267\u884c\u7a0b\u5e8f', extensions: ['exe'] }],
+            title: kind === 'cli' ? '选择官方 lark-cli' : '选择 Node.js 24 或更新版本的 node',
+            properties: ['openFile'],
+            ...(host.platform === 'win32' ? { filters: [{ name: '可执行程序', extensions: ['exe'] }] } : {}),
           });
           currentWindow();
           return result.canceled ? null : result.filePaths[0];
@@ -146,7 +153,7 @@ export function registerFeishu({ ipcMain, localOnly, runtime, resources, runtime
   }
   ipcMain.handle('tuantuan-feishu:state', localOnly('tuantuan-feishu:state', async (event) => {
     const host = runtime();
-    if (host.platform !== 'win32' || !host.packaged || host.remote) return unavailable();
+    if (!supportedHost(host) || !host.packaged || host.remote) return unavailable();
     const before = trusted(event);
     const value = await ensure(before);
     const after = trusted(event);

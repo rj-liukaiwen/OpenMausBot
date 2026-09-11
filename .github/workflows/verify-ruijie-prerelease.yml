@@ -1,0 +1,102 @@
+name: Ruijie pre-package verification (NO INSTALLERS)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/verify-ruijie-*']
+
+permissions:
+  contents: read
+
+jobs:
+  mac-regression:
+    name: Native checks (${{ matrix.arch }}) — not release approval
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Require the actual native architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: node -e 'require("node:assert/strict").equal(process.platform + "-" + process.arch, "darwin-" + process.env.EXPECTED_ARCH)'
+      - run: pnpm install --frozen-lockfile
+      - name: Type checks and focused regressions
+        run: |
+          node node_modules/typescript/bin/tsc -b
+          node node_modules/typescript/bin/tsc -p tsconfig.server.json
+          node node_modules/vitest/vitest.mjs run server/system-prompt.test.ts server/harness-browser-tools.test.ts server/drivers/ruijie-harness.test.ts server/browser-proxy.test.ts server/browser-live.test.ts server/browser-runtime.test.ts server/composio-transport.test.ts electron/managed-composio.test.mjs src/components/BrowserViewport.ack.test.ts src/components/BrowserPanel.test.ts src/components/PluginsPanel.test.ts src/tuantuan/feishu/useFeishu.test.ts src/tuantuan/feishu/feishu.test.ts src/tuantuan/feishu/PluginsPanel.test.ts
+          node --test electron/managed-composio-transport.node-test.mjs electron/connected-apps-release.node-test.mjs electron/ruijie-package-config.node-test.mjs electron/tuantuan-feishu.node-test.mjs electron/feishu-mac-signature.node-test.mjs connectors/feishu/native-format.test.mjs connectors/feishu/runtime-mac.test.mjs connectors/feishu/runtime.test.mjs connectors/feishu/licenses.test.mjs scripts/check-ruijie-release-readiness.node-test.mjs
+      - name: Prepare native browser dependencies and bundled JS only
+        run: |
+          node scripts/prepare-browser.mjs --current
+          node scripts/bundle-server.mjs
+      - name: Native browser and packaged-shape server (no app or installer)
+        env:
+          TARGET: darwin-${{ matrix.arch }}
+        run: |
+          mkdir -p verification-resources
+          ln -s "$GITHUB_WORKSPACE/dist-native/browser/$TARGET" verification-resources/browser-engine
+          node scripts/smoke-browser-bundle.mjs --resources "$GITHUB_WORKSPACE/verification-resources"
+          node scripts/smoke-packaged-server.mjs --browser-default-enabled --browser-bundle "$GITHUB_WORKSPACE/dist-native/browser/$TARGET"
+      - name: Native control and simulated desktop proxy recovery
+        env:
+          OMB_VERIFY_BROWSER_BINARY: ${{ github.workspace }}/dist-native/browser/darwin-${{ matrix.arch }}/agent-browser
+          OMB_VERIFY_BROWSER_CHROME: ${{ github.workspace }}/dist-native/browser/darwin-${{ matrix.arch }}/chrome/chrome-headless-shell-mac-${{ matrix.arch }}/chrome-headless-shell
+        run: |
+          node --experimental-strip-types scripts/verify-browser-runtime-lifecycle.ts --viewer-first
+          node --experimental-strip-types scripts/verify-browser-runtime-lifecycle.ts
+          node --experimental-strip-types scripts/verify-browser-live-control.ts
+          node node_modules/electron/cli.js scripts/smoke-connected-apps-network.mjs
+      - name: Report remaining release blockers (not a passing receipt)
+        if: always()
+        run: |
+          echo '## This workflow never approves a release' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No installers, app bundles, signing, notarization, releases, or verification receipts are generated.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'License engineering review is recorded per Mac artifact; still required: passing notice/hash gate, signed native execution, live authorized account read, native UI/permissions and final installer acceptance.' >> "$GITHUB_STEP_SUMMARY"
+          echo "Tested commit: $GITHUB_SHA; target: darwin-${{ matrix.arch }}" >> "$GITHUB_STEP_SUMMARY"
+
+  mac-feishu-runtime:
+    name: Feishu dependency gate (${{ matrix.arch }}) — NO INSTALLERS
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - name: Prepare approved exact native dependencies only
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          node -e 'require("node:assert/strict").equal(process.platform + "-" + process.arch, "darwin-" + process.env.EXPECTED_ARCH)'
+          node scripts/prepare-feishu-runtime.mjs --current
+      - name: Report scope (never a release receipt)
+        if: always()
+        run: |
+          echo 'Feishu runtime preparation requires target-specific license approval; Windows approvals are not inherited.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This job does not create an app/installer, authenticate a Feishu account, or prove signed-app execution.' >> "$GITHUB_STEP_SUMMARY"

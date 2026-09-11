@@ -5296,6 +5296,7 @@ describe("harness HTTP API", () => {
       expect(system.startsWith("You are Kiwi, a personal bot in OpenMausBot. Role: Tracker.")).toBe(true);
       const persona = "You are Kiwi, a personal bot in OpenMausBot. Role: Tracker.";
       const afterPersona = system.slice(persona.length);
+      expect(system).toContain('默认使用简体中文与用户交流');
       expect(afterPersona.startsWith("\n\nYour standing instructions follow.")).toBe(true);
       expect(system).toContain("--- BEGIN STANDING INSTRUCTIONS (SOUL.md, 28 bytes) ---\nFile bugs. Never file noise.\n--- END STANDING INSTRUCTIONS ---");
     } finally {
@@ -8145,6 +8146,7 @@ describe("bot memory API", () => {
       });
       expect(before.body.sections.map((s: { id: string }) => s.id)).not.toContain("soul");
       expect(before.body.sections.map((s: { id: string }) => s.id)).toContain("memory");
+      expect(before.body.sections.find((s: { id: string }) => s.id === 'response-language')?.text).toContain('默认使用简体中文与用户交流');
       expect(before.body.totalBytes).toBe(
         before.body.sections.reduce((n: number, s: { bytes: number }) => n + s.bytes, 0),
       );

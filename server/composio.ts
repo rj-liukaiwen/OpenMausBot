@@ -148,6 +148,13 @@ interface IntegrationContext {
 }
 
 let managedBrokerAccess: { url: string; token: string } | null | undefined;
+let registrationState: 'pending' | 'network-unreachable' | 'service-error' | 'ready' | undefined;
+export function managedBrokerRegistrationState() { return registrationState; }
+let managedBrokerFetch: ((path: string, init?: RequestInit) => Promise<Response>) | undefined;
+
+export function setManagedBrokerFetch(fetchImpl: ((path: string, init?: RequestInit) => Promise<Response>) | undefined): void {
+  managedBrokerFetch = fetchImpl;
+}
 
 const managedBrokerMessageSchema = z.record(z.string(), z.unknown());
 const managedBrokerToken = /^[0-9a-f]{64}$/;
@@ -174,6 +181,8 @@ export function applyManagedBrokerMessage(message: unknown): boolean {
     return false;
   }
   setManagedBrokerAccess(parsed.data.access);
+  const state = z.enum(['pending', 'network-unreachable', 'service-error', 'ready']).safeParse(parsed.data.registrationState);
+  if (state.success) registrationState = state.data;
   return true;
 }
 
@@ -291,6 +300,7 @@ async function brokerRequest(path: string, init?: RequestInit): Promise<Response
   const headers = new Headers(init?.headers);
   headers.set("authorization", `Bearer ${broker.token}`);
   if (init?.body) headers.set("content-type", "application/json");
+  if (managedBrokerFetch) return managedBrokerFetch(path, { ...init, headers });
   return fetch(`${broker.url}${path}`, {
     ...init,
     headers,
@@ -603,12 +613,15 @@ export async function relayMcp(
   if (forwardedTransportSessionId) {
     headers.set("mcp-session-id", forwardedTransportSessionId);
   }
-  const response = await fetch(url, {
+  const request = {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(10 * 60_000),
-  });
+  };
+  const response = !apiKey && managedBrokerFetch
+    ? await managedBrokerFetch('/v1/mcp', request)
+    : await fetch(url, request);
   const declared = Number(response.headers.get("content-length") ?? "0");
   if (declared > 20 * 1024 * 1024) throw new Error("Connected-app response exceeded 20 MB");
   const bytes = new Uint8Array(await response.arrayBuffer());

@@ -12,6 +12,10 @@ const MCP = '/api/mcp/servers/tuantuan-feishu';
 const NAME = 'tuantuan-feishu';
 const ERROR = '\u64cd\u4f5c\u672a\u5b8c\u6210\uff0c\u8bf7\u68c0\u67e5\u914d\u7f6e\u548c\u6388\u6743\u540e\u91cd\u8bd5\u3002';
 const ERRORS = {
+  UNSAFE_PATH: '飞书组件或配置路径未通过安全检查，连接已停止；请使用修正后的客户端，不要清除已有授权。',
+  UNSUPPORTED_PLATFORM: '当前系统或处理器架构尚不支持本机飞书连接。',
+  BUNDLED_RUNTIME_MISSING: '安装包缺少飞书运行组件，请使用补齐运行时的新安装包；不会借用本机开发环境或下载其他版本。',
+  INVALID_ARCHIVE: '飞书运行组件归档无效，已停止准备。',
   APP_UNAVAILABLE: '原飞书应用已删除或未启用。可重新创建并授权；旧配置和任务将保留，网络故障不会触发应用替换。',
   AUTH_DENIED: '\u98de\u4e66\u6388\u6743\u5df2\u62d2\u7edd\uff0c\u8bf7\u91cd\u8bd5\u8fde\u63a5\u5e76\u5728\u6d4f\u89c8\u5668\u4e2d\u786e\u8ba4\u3002',
   AUTH_EXPIRED: '\u98de\u4e66\u6388\u6743\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u8bd5\u8fde\u63a5\u3002',

@@ -52,7 +52,10 @@ export function BrowserViewport({ frame, width, height, driving, input: sendInpu
   };
   // The engine can emit a new sequence with identical pixels. React then
   // keeps the same src, so there is no load event to ACK that next frame.
-  useEffect(() => { const tick = requestAnimationFrame(rendered); return () => cancelAnimationFrame(tick); }, [frame]);
+  // ACK decoded pixels without requestAnimationFrame: occluded/background
+  // windows can suspend it, which otherwise trips the server's ACK timeout.
+  // New, undecoded images still wait for onLoad; never ACK a failed decode.
+  useEffect(rendered, [frame]);
   const point = (clientX: number, clientY: number) => {
     const rect = screen.current?.getBoundingClientRect();
     if (!rect?.width || !rect.height) return { x: 0, y: 0 };

@@ -1,4 +1,37 @@
 const TOKEN = /^[0-9a-f]{64}$/;
+export const DEFAULT_COMPOSIO_BROKER_URL = 'https://openmausbot-composio.milindsoni201.workers.dev';
+
+/** First-launch failures recover in-process. A bounded backoff prevents a
+ * disconnected laptop from hammering registration; quit cancels the timer. */
+export function createManagedComposioRegistrationLoop({ attempt, hasAccess, delays = [2000, 5000, 15000, 60000] }) {
+  let timer;
+  let inFlight;
+  let closed = false;
+  let failures = 0;
+  function run() {
+    if (closed) return Promise.resolve();
+    if (inFlight) return inFlight;
+    inFlight = Promise.resolve().then(() => { if (!closed) return attempt(); })
+      .catch(() => { /* errors are reported by the registration boundary */ })
+      .finally(() => {
+        inFlight = undefined;
+        if (!closed && !hasAccess()) {
+          const delay = delays[Math.min(failures++, delays.length - 1)];
+          timer = setTimeout(() => { timer = undefined; void run(); }, delay);
+          timer.unref?.();
+        }
+      });
+    return inFlight;
+  }
+  return {
+    start() { if (!timer && !inFlight && !closed) void run(); },
+    retry() {
+      clearTimeout(timer); timer = undefined; failures = 0;
+      return run();
+    },
+    close() { closed = true; clearTimeout(timer); timer = undefined; },
+  };
+}
 
 export function normalizeManagedComposioBrokerUrl(value) {
   if (typeof value !== "string" || !value.trim()) return "";
@@ -86,7 +119,10 @@ export async function ensureManagedComposioCredentials({
   } catch (error) {
     // This operation always settles locally. The caller runs it after first
     // paint, so an optional hosted integration cannot delay desktop readiness.
-    log(`connected-apps registration failed: ${error?.message ?? error}`);
+    const code = String(error?.cause?.code ?? error?.code ?? '');
+    const network = /TIMEOUT|ECONN|ENOTFOUND|EAI_AGAIN/.test(code) || /fetch failed|net::ERR_|timeout/i.test(error?.message ?? '');
+    log(network ? 'connected-apps registration failed: NETWORK_UNREACHABLE (check network/system proxy)' :
+      'connected-apps registration failed: SERVICE_OR_AUTH_ERROR (no credentials stored)');
   }
   return credentials;
 }

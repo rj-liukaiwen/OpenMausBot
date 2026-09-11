@@ -308,7 +308,7 @@ export function BotSettingsDialog({ bot }: { bot: Bot }) {
             header's hit box to nothing while the X icon still paints —
             clicks miss the button and only the outer backdrop dismisses. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-center justify-between px-5 py-3">
+          <div className="relative z-10 flex shrink-0 items-center justify-between bg-panel px-5 py-3">
             <span className="text-[15px] font-semibold text-ink">
               {sections.find((s) => s.id === section)?.label}
             </span>
@@ -321,7 +321,7 @@ export function BotSettingsDialog({ bot }: { bot: Bot }) {
                 dispatch({ type: "toggleSettings", open: false });
               }}
               aria-label={t("botSettings.close")}
-              className="rounded-md p-1 text-ink-secondary hover:bg-control hover:text-ink"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-control hover:text-ink"
             >
               <X size={18} className="pointer-events-none" />
             </button>

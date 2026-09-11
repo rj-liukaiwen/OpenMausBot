@@ -19,6 +19,7 @@ export function LiveBrowser({ bot }: { bot: Bot }) {
   const [tabs, setTabs] = useState<BrowserTab[]>([]);
   const [address, setAddress] = useState("");
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [control, setControl] = useState<{ held: boolean; controlling: boolean; owned: boolean; recoveryRequired?: boolean }>({ held: false, controlling: false, owned: false });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -32,6 +33,8 @@ export function LiveBrowser({ bot }: { bot: Bot }) {
   const typingDialog = useRef<HTMLDialogElement>(null);
   const inputQueue = useRef<ReturnType<typeof createBrowserInputQueue> | null>(null);
   const urlEditing = useRef(false);
+  const retryState = useRef({ key: '', failures: 0 });
+  const reconnect = () => { retryState.current.failures = 0; setAttempt((value) => value + 1); };
   const profileName = bot.browserProfile === "guest" ? t("browser.live.temporary")
     : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? t("browser.live.own", { name: bot.name });
   useEffect(() => { if (showProfiles) profilesDialog.current?.showModal(); else profilesDialog.current?.close(); }, [showProfiles]);
@@ -47,6 +50,11 @@ export function LiveBrowser({ bot }: { bot: Bot }) {
 
   useEffect(() => {
     let stopped = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let healthyTimer: ReturnType<typeof setTimeout> | undefined;
+    const key = `${bot.id}:${bot.browserProfile}`;
+    if (retryState.current.key !== key) retryState.current = { key, failures: 0 };
+    setReconnecting(false);
     setFrame(null); setTabs([]); setAddress(""); setConnected(false); setError("");
     setControl({ held: false, controlling: false, owned: false }); setPending(false);
     const source = new EventSource(`/api/bots/${bot.id}/browser/live`);
@@ -62,7 +70,12 @@ export function LiveBrowser({ bot }: { bot: Bot }) {
       }, (cause) => { if (viewer.current === expected) setError(cause instanceof Error ? cause.message : String(cause)); });
       setConnected(true);
     });
-    listen("frame", setFrame);
+    listen("frame", (data) => {
+      setFrame(data);
+      // One opening frame is not a healthy session: avoid an endless loop
+      // where the stream immediately fails after every successful handshake.
+      healthyTimer ??= setTimeout(() => { if (!stopped) retryState.current.failures = 0; }, 30_000);
+    });
     listen("tabs", (data) => {
       setTabs(data.tabs);
       const active = data.tabs.find((tab: BrowserTab) => tab.active);
@@ -81,12 +94,26 @@ export function LiveBrowser({ bot }: { bot: Bot }) {
       // switch or reconnect. It must not clear the replacement viewer/input.
       if (stopped) return;
       stopped = true;
+      clearTimeout(healthyTimer);
       let message = t("browser.live.connectionEnded");
-      if (event instanceof MessageEvent) { try { message = JSON.parse(event.data).message || message; } catch { /* Network error fallback. */ } }
+      let retryable = !(event instanceof MessageEvent);
+      if (event instanceof MessageEvent) { try {
+        const detail = JSON.parse(event.data);
+        message = detail.message || message; retryable = detail.retryable === true;
+      } catch { /* Network error fallback. */ } }
       setError(message); setConnected(false); setFrame(null); setControl({ held: false, controlling: false, owned: false });
+      setTabs([]); setAddress(""); setPending(false);
       viewer.current = ""; inputQueue.current?.clear(); source.close();
+      const delay = [1000, 2000, 5000][retryState.current.failures];
+      if (retryable && delay !== undefined) {
+        retryState.current.failures += 1; setReconnecting(true);
+        retryTimer = setTimeout(() => setAttempt((value) => value + 1), delay);
+      }
     });
-    return () => { stopped = true; viewer.current = ""; inputQueue.current?.clear(); source.close(); };
+    return () => {
+      stopped = true; clearTimeout(retryTimer); clearTimeout(healthyTimer);
+      viewer.current = ""; inputQueue.current?.clear(); source.close();
+    };
   }, [bot.id, bot.browserProfile, attempt, action]);
 
   const execute = async (body: Record<string, unknown>) => {
@@ -121,7 +148,7 @@ export function LiveBrowser({ bot }: { bot: Bot }) {
         <button type="button" className={button} disabled={!driving} aria-label={t("browser.live.forward")} onClick={() => void execute({ type: "forward" })}><ArrowRight size={17} /></button>
         <button type="button" className={button} disabled={!driving} aria-label={t("browser.live.reload")} onClick={() => void execute({ type: "reload" })}><RotateCw size={17} /></button>
       </div>
-      <input ref={addressInput} aria-label={t("browser.live.address")} readOnly={!driving} value={address} onChange={(e) => setAddress(e.target.value)} onFocus={(e) => { urlEditing.current = true; if (driving) e.target.select(); }} onBlur={() => { urlEditing.current = false; }} placeholder={connected ? "about:blank" : t("browser.live.connecting")} spellCheck={false} className="mx-1 min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1.5 text-center text-[12px] outline-none placeholder:text-ink-secondary focus:bg-inset focus:text-left" />
+      <input ref={addressInput} aria-label={t("browser.live.address")} readOnly={!driving} value={address} onChange={(e) => setAddress(e.target.value)} onFocus={(e) => { urlEditing.current = true; if (driving) e.target.select(); }} onBlur={() => { urlEditing.current = false; }} placeholder={connected ? "about:blank" : error ? t("browser.live.disconnected") : t("browser.live.connecting")} spellCheck={false} className="mx-1 min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1.5 text-center text-[12px] outline-none placeholder:text-ink-secondary focus:bg-inset focus:text-left" />
       <button type="button" disabled={!connected || pending || (control.held && !control.owned)} onClick={() => {
         if (control.recoveryRequired && !window.confirm(t("browser.live.restartConfirm"))) return;
         void execute({ type: control.recoveryRequired ? "restart" : hasHumanControl ? "release" : "take" });
@@ -133,7 +160,7 @@ export function LiveBrowser({ bot }: { bot: Bot }) {
         <summary className={`${button} list-none cursor-pointer [&::-webkit-details-marker]:hidden`} aria-label={t("browser.live.menu")} title={t("browser.live.menu")}><EllipsisVertical size={17} /></summary>
         <div className="absolute right-0 top-full z-20 mt-2 flex w-44 flex-col rounded-xl border border-hairline/50 bg-card p-1.5 text-[12px] shadow-xl">
           <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!driving} onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setShowTyping(true); }}>{t("browser.live.typePaste")}</button>
-          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset" onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); setAttempt((value) => value + 1); }}>{t("browser.live.reconnectView")}</button>
+          <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset" onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); reconnect(); }}>{t("browser.live.reconnectView")}</button>
           <button type="button" className="rounded-md px-3 py-2 text-left hover:bg-inset disabled:opacity-40" disabled={!connected || pending} onClick={(e) => {
             e.currentTarget.closest("details")?.removeAttribute("open");
             if (!window.confirm(t("browser.live.restartConfirm"))) return;
@@ -142,7 +169,7 @@ export function LiveBrowser({ bot }: { bot: Bot }) {
         </div>
       </details>
     </form>
-    {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-hairline/30 px-3 py-2 text-[12px] text-danger"><span>{error}</span>{!connected && <button className="shrink-0 underline" onClick={() => setAttempt((value) => value + 1)}>{t("browser.live.reconnect")}</button>}</div>}
+    {error && <div role="alert" className="flex items-center justify-between gap-2 border-b border-hairline/30 px-3 py-2 text-[12px] text-danger"><span>{error}</span>{!connected && <button className="shrink-0 underline" onClick={reconnect}>{reconnecting ? t("browser.live.connecting") : t("browser.live.reconnect")}</button>}</div>}
     <div className="min-h-48 flex-1 overflow-auto bg-inset/40">
       {frame ? <BrowserViewport frame={frame} {...viewport} driving={driving} input={input}
         onReturnToToolbar={() => addressInput.current?.focus()}

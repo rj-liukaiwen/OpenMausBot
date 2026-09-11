@@ -20,7 +20,10 @@ import { parseArgs, promisify } from "node:util";
 import { browserBundlePaths, browserBundleSpec } from "../server/browser-bundle-release.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const { values } = parseArgs({ options: { "browser-bundle": { type: "string" } } });
+const { values } = parseArgs({ options: {
+  "browser-bundle": { type: "string" },
+  "browser-default-enabled": { type: "boolean", default: false },
+} });
 const browserBundle = values["browser-bundle"];
 let browserSpec;
 if (browserBundle !== undefined) {
@@ -62,6 +65,7 @@ const fixtureEnv = {
   XDG_DATA_HOME: join(home, ".local", "share"),
   OMB_DATA_DIR: join(home, ".openmausbot"),
   OMB_PORT: String(port),
+  ...(values["browser-default-enabled"] ? { OMB_BROWSER_DEFAULT_ENABLED: "1" } : {}),
   // A package smoke test must never launch the user's installed Harness.
   // Point discovery at an intentionally absent executable so this isolated
   // home stays headless and cannot show a login window with an empty cache.
@@ -269,7 +273,8 @@ if (!proxyReport || proxyReport.error || proxyReport.missing.length > 0) {
 }
 
 if (browserBundle && (browserReport?.error || browserReport?.browserEngine?.kind !== "engine" ||
-  browserReport.browserEngine.version !== browserSpec.engine.version || browserReport.browserEnabled !== false)) {
+  browserReport.browserEngine.version !== browserSpec.engine.version ||
+  browserReport.browserEnabled !== values["browser-default-enabled"])) {
   console.error("The fresh-home packaged server did not discover its browser bundle with browser access still opt-in:");
   console.error(JSON.stringify(browserReport, null, 2));
   process.exit(1);

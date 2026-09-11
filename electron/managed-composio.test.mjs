@@ -4,11 +4,55 @@ import {
   managedComposioAccess,
   managedComposioChildEnvironment,
   normalizeManagedComposioBrokerUrl,
+  createManagedComposioRegistrationLoop,
 } from "./managed-composio.mjs";
 
 const TOKEN = "a".repeat(64);
 
 describe("managed Composio desktop registration", () => {
+  it("manual retry skips offline backoff and shares an active registration", async () => {
+    vi.useFakeTimers();
+    let finish;
+    let access = false;
+    const attempt = vi.fn().mockResolvedValueOnce(undefined).mockImplementationOnce(() => new Promise((resolve) => {
+      finish = () => { access = true; resolve(); };
+    }));
+    const loop = createManagedComposioRegistrationLoop({ attempt, hasAccess: () => access, delays: [60_000] });
+    try {
+      loop.start();
+      await vi.advanceTimersByTimeAsync(0);
+      const first = loop.retry();
+      const second = loop.retry();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(attempt).toHaveBeenCalledTimes(2);
+      expect(first).toBe(second);
+      finish();
+      await first;
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(attempt).toHaveBeenCalledTimes(2);
+      loop.close();
+      await loop.retry();
+      expect(attempt).toHaveBeenCalledTimes(2);
+    } finally { loop.close(); vi.useRealTimers(); }
+  });
+  it("retries an offline first launch and stops after access arrives, without overlapping attempts", async () => {
+    vi.useFakeTimers();
+    let online = false;
+    let access = false;
+    const attempt = vi.fn(async () => { if (online) access = true; });
+    const loop = createManagedComposioRegistrationLoop({ attempt, hasAccess: () => access, delays: [10, 20] });
+    try {
+      loop.start(); loop.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(attempt).toHaveBeenCalledTimes(1);
+      online = true;
+      await vi.advanceTimersByTimeAsync(10);
+      expect(access).toBe(true);
+      expect(attempt).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(attempt).toHaveBeenCalledTimes(2);
+    } finally { loop.close(); vi.useRealTimers(); }
+  });
   it("publishes only a complete broker credential", () => {
     expect(managedComposioAccess("https://broker.example/", { composioBrokerToken: TOKEN })).toEqual({
       url: "https://broker.example",

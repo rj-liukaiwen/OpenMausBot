@@ -11,7 +11,7 @@ The desktop application ships two separate components:
   is no root-level NOTICE in that tag. All six official macOS/Linux binaries
   were downloaded and their SHA-256 digests checked against GitHub's release
   metadata on 2026-09-08.
-- **Windows exception: agent-browser 0.36.0-omb.1** is an OpenMausBot vendor
+- **Historical Windows revision: agent-browser 0.36.0-omb.1** is an OpenMausBot vendor
   build, not an official or unmodified Vercel executable. It starts from exact
   v0.36.0 commit `eb05921bad874cd2a1b4fa5d1149f1ed26576cae` and carries only
   the Windows handle-inheritance fix contributed by `holny` in upstream
@@ -27,6 +27,21 @@ The desktop application ships two separate components:
   checks are required before those executable bytes are published and pinned.
   Upstream 0.37.0 does not include that fix; keep this tested Windows build
   until an updated official or backported release passes those native checks.
+- **Locally pinned Windows revision: 0.36.0-omb.2** keeps the original stdio
+  patch unchanged and additionally applies
+  `agent-browser-windows-no-console.patch` (SHA-256
+  `556eb6d15ae8315572617bcfda76a31ec7570680c6625569be94ba88d90b6c27`).
+  It requests `CREATE_NO_WINDOW` for Chromium, nested MCP commands and the
+  Git working-directory probe; it also advances version metadata. The builder
+  emits both patches and their digests in the candidate provenance. This is
+  not a published download. Production now pins the native-tested `.2` SHA
+  `775127b9d77326acf80478b484c0d9ce587bd47ae9390339c25f7e629bb05857`
+  (13,850,624 bytes); preparation requires those local vendor bytes and checks
+  provenance. No invented remote URL and no fallback to `.1` are allowed.
+  Full UI/package-combination acceptance remains pending. Never overwrite `.1` assets.
+  The builder isolates the extracted tree from enclosing Git repositories and
+  checks actual patched source/version before compiling; an exit-zero skipped
+  patch is not accepted as provenance.
 - **Chromium Headless Shell 152.0.7977.82**, Google's official
   `chrome-headless-shell` assets published through Chrome for Testing:
   <https://googlechromelabs.github.io/chrome-for-testing/152.0.7977.82.json>.

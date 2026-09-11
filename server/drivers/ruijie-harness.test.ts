@@ -123,7 +123,7 @@ describe("Ruijie Harness driver", () => {
       if (url.pathname.endsWith("agentPreset.read")) value = {
         agentPreset: "standard",
         trust: "system",
-        content: "- id: tool-pwsh\n  name: '@deepseek-ai/dsh-tool-pwsh'\n",
+        content: "- id: tool-pwsh\n  name: '@deepseek-ai/dsh-tool-pwsh'\n  disabled: !!js process.platform !== 'win32'\n- id: tool-web\n  name: '@deepseek-ai/dsh-tool-web'\n  config:\n    fetch: false\n    searchTimeoutMs: 60000\n",
       };
       if (url.pathname.endsWith("session.create")) value = { sessionId: "session-fixture" };
       if (url.pathname.endsWith("session.selectModel")) value = { selected: body.payload };
@@ -728,9 +728,40 @@ describe("Ruijie Harness driver", () => {
       expect(preset).toContain('command: "C:\\\\OpenMaus\\\\electron.exe"');
       expect(preset).toContain('"OMB_BROWSER_TOKEN":"secret"');
       expect(preset).toContain("failOnStartupError: false");
+      // The standard search defaults to the host provider (which can fall
+      // back to anonymous Firecrawl). This bot owns a different browser.
+      expect(preset).toContain("search: false");
+      expect(preset).toContain("harness-browser-tools");
+      expect(preset).toContain("!!js process.platform !== 'win32'");
     } finally {
       await rm(dshHome, { recursive: true, force: true });
     }
+  });
+
+  it("restores bounded conversation context on a fresh browser capability session, but not a reused one", async () => {
+    const dshHome = await mkdtemp(join(tmpdir(), 'openmaus-rjh-test-'));
+    try {
+      const instance = await RuijieHarnessDriver.create({
+        instanceId: 'ruijieHarness', displayName: '锐捷 Harness', enabled: true, environment: {},
+        config: { endpoint: 'http://127.0.0.1:49724', expectedAccountEmail: 'wangyunshang@ruijie.com.cn', dshHome },
+      });
+      const threadId = 'thread-browser-recovery';
+      const browser = { command: 'node', args: ['browser-proxy.js'], env: { OMB_BROWSER_TOKEN: 'synthetic-first' } };
+      const first = await instance.adapter.sendTurn({ threadId, text: '继续',
+        integrations: { browser }, resumeCursor: 'session-before-restart', recoveryText: 'Prior task: read page A. Current request: 继续' });
+      expect(calls.filter((call) => call.method === 'session.prompt').at(-1)?.payload.content[0].text).toContain('Prior task: read page A');
+      await instance.adapter.interruptTurn(threadId, first.turnId);
+      const second = await instance.adapter.sendTurn({ threadId, text: '继续', integrations: { browser },
+        resumeCursor: 'session-fixture', recoveryText: 'DO NOT REPLAY IN A LIVE SESSION' });
+      expect(calls.filter((call) => call.method === 'session.prompt').at(-1)?.payload.content[0].text).toBe('继续');
+      await instance.adapter.interruptTurn(threadId, second.turnId);
+      const third = await instance.adapter.sendTurn({ threadId, text: '继续',
+        integrations: { browser: { ...browser, env: { OMB_BROWSER_TOKEN: 'synthetic-rotated' } } },
+        resumeCursor: 'session-fixture', recoveryText: 'Recovered task after token rotation' });
+      expect(calls.filter((call) => call.method === 'session.create')).toHaveLength(2);
+      expect(calls.filter((call) => call.method === 'session.prompt').at(-1)?.payload.content[0].text).toBe('Recovered task after token rotation');
+      await instance.adapter.interruptTurn(threadId, third.turnId);
+    } finally { await rm(dshHome, { recursive: true, force: true }); }
   });
 
   it("uses a distinct computer MCP preset for each Harness session", async () => {

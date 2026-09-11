@@ -136,7 +136,7 @@ test("registers only gated state/invoke IPC and lazily shares one host connector
   assert.equal(h.calls.loads.length, 3);
   assert.deepEqual(h.calls.loads.map((url) => new URL(url).pathname.split("/").at(-1)).sort(),
     ["index.mjs", "kernel.mjs", "runtime.mjs"]);
-  assert.deepEqual(h.calls.provisioners, [{ root: RUNTIME_ROOT }]);
+  assert.deepEqual(h.calls.provisioners, [{ root: RUNTIME_ROOT, bundledRoot: undefined }]);
   assert.equal(h.calls.connectors.length, 1);
   assert.deepEqual(h.calls.states, [[]]);
   assert.deepEqual(h.calls.invokes, [["connect", input]]);
@@ -147,6 +147,19 @@ test("registers only gated state/invoke IPC and lazily shares one host connector
   assert.equal(JSON.stringify({ options, replies, calls: h.calls.invokes, provisioners: h.calls.provisioners }).includes(TOKEN), false);
   assert.equal(Object.hasOwn(options, "ownerToken"), false);
   assert.equal(Object.hasOwn(options, "token"), false);
+});
+
+test("Mac host uses the same private connector without an exe-only picker", async (t) => {
+  const h = fixture(t); h.host.platform = 'darwin';
+  assert.deepEqual(await h.request('state'), STATE);
+  await h.registration.start();
+  const callbacks = await h.callbacks();
+  await callbacks.chooseExecutable('cli');
+  assert.equal(h.calls.dialogs[0].options.filters, undefined);
+  assert.equal(callbacks.authorizeTool({}), true);
+  h.host.remote = true;
+  assert.deepEqual(await h.request('state'), UNAVAILABLE);
+  await assert.rejects(h.request('invoke', 'connect', {}));
 });
 
 test("recovery context uses the host private root and rechecks trust around asynchronous creation", async (t) => {
@@ -176,7 +189,7 @@ const deniedContexts = [
   ["remote runtime", (h) => { h.host.remote = true; }, true],
   ["unpackaged app", (h) => { h.host.packaged = false; }, true],
   ["Linux", (h) => { h.host.platform = "linux"; }, true],
-  ["macOS", (h) => { h.host.platform = "darwin"; }, true],
+  ["Linux", (h) => { h.host.platform = "linux"; }, true],
   ["unknown PID", (h) => { h.host.pid = undefined; }],
   ["zero PID", (h) => { h.host.pid = 0; }],
   ["not ready", (h) => { h.host.ready = false; }],
@@ -642,12 +655,14 @@ for (const delay of [3000, Infinity]) {
     await h.callbacks();
     const calls = [];
     let beforeQuit;
+    let registrationClosed = false;
     const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
     const source = main.match(/app\.on\("before-quit",[\s\S]*?\n\}\);/)?.[0];
     assert.ok(source);
     runInNewContext(source, {
       app: { on: (_event, handler) => { beforeQuit = handler; }, quit: () => calls.push("quit") },
       desktopShutdownStarted: false, cuaCleanedUp: false, serverProc: null,
+      composioRegistrationLoop: { close: () => { registrationClosed = true; } },
       browserDescriptorRefreshTimer: null, clearInterval,
       syncCompanionKeepAwake() {}, desktopCompanionRelay: null, nativeActions: {},
       stopRecorder() {}, browserSurface: null, browserHost: null,
@@ -656,6 +671,7 @@ for (const delay of [3000, Infinity]) {
       desktopFeishu: h.registration, awaitFeishuShutdown, setTimeout,
     });
     beforeQuit({ preventDefault: () => calls.push("prevented") });
+    assert.equal(registrationClosed, true, "quitting stops cloud registration without delaying Feishu cleanup");
     assert.equal(h.calls.closes.length, 1);
     await assert.rejects(h.request("invoke", "connect"));
     if (Number.isFinite(delay)) setTimeout(() => closeGate.resolve(), delay);
@@ -706,9 +722,10 @@ test("main wires private runtime, encrypted credential updates, and native depen
   assert.ok(registration, "main must register the Feishu host");
   for (const pattern of [/ipcMain,\s*localOnly/, /platform:\s*process\.platform/, /packaged:\s*app\.isPackaged\s*\|\|\s*OWNS_LOCAL_SERVER/,
     /remote:\s*!!desktopRemoteAccess/, /stopping:\s*desktopShutdownStarted/, /ready:\s*serverReady/,
-    /pid:\s*serverProc\?\.pid/, /rendererOrigin:\s*app\.isPackaged[\s\S]*?new URL\(DEV_URL\)\.origin/,
+    /pid:\s*serverProc\?\.pid/, /rendererOrigin:\s*desktopLayout\.built\s*\?\s*`http:\/\/127\.0\.0\.1:\$\{SERVER_PORT\}`\s*:\s*new URL\(DEV_URL\)\.origin/,
     /token:\s*desktopMutationToken/, /process\.resourcesPath,\s*"tuantuan-feishu"/,
     /runtimeRoot:\s*path\.join\(app\.getPath\("userData"\),\s*"feishu"\)/,
+    /bundledRuntimeRoot:\s*desktopLayout\.feishu/,
     /credentialStoreUnavailable/, /secureCredentialState\.read\(\)/,
     /saveCredentials:\s*updateSecureCredentialDocument/, /dialog,\s*openExternal:.*shell\.openExternal\(url\)/,
     /window:\s*\(\)\s*=>\s*mainWindow/]) assert.match(registration, pattern);
@@ -725,9 +742,9 @@ test("main closes Feishu on the owning kernel exit, remote switch, and app quit"
   assert.match(quit, /const cleanup = Promise\.all\(\[\s*(?:\/\/[^\n]*\n\s*)?awaitFeishuShutdown\(\(\) => desktopFeishu\?\.close\(\)\),\s*ownedHelperCleanup,/);
 });
 
-test("preload exposes only state/invoke on local Windows, never an owner capability", () => {
+test("preload exposes only state/invoke on local Windows/macOS, never an owner capability", () => {
   const preload = readFileSync(new URL("./preload.cjs", import.meta.url), "utf8");
-  assert.match(preload, /process\.platform === "win32" && !desktopRemoteClient\s*\?\s*\{\s*feishu:/);
+  assert.match(preload, /\["win32", "darwin"\]\.includes\(process\.platform\) && !desktopRemoteClient\s*\?\s*\{\s*feishu:/);
   const feishu = preload.match(/feishu:\s*\{([\s\S]*?)\n\s*\}/)?.[1];
   assert.ok(feishu);
   assert.match(feishu, /state:\s*\(\)\s*=>\s*ipcRenderer\.invoke\("tuantuan-feishu:state"\)/);

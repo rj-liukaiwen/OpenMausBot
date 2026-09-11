@@ -522,8 +522,11 @@ export function showToolCallsEnabled(cfg: AppConfig): boolean {
 
 /** Workspace-level gate for the experimental built-in browser. A bot's own
  * switch sits under it, so either can withhold the browser. */
-export function builtInBrowserEnabled(cfg: AppConfig): boolean {
-  return cfg.features?.browser === true;
+export function builtInBrowserEnabled(
+  cfg: AppConfig,
+  defaultEnabled = process.env.OMB_BROWSER_DEFAULT_ENABLED === "1",
+): boolean {
+  return cfg.features?.browser ?? defaultEnabled;
 }
 
 // OMB_DATA_DIR isolates test/soak rigs from the user's real fleet.

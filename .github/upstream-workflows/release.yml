@@ -21,6 +21,8 @@
 name: Release
 
 on:
+  # Downstream main is the source handoff, not release approval. Updating it
+  # must never create installers or publish assets without an explicit run.
   workflow_dispatch:
     inputs:
       ref:
@@ -32,12 +34,6 @@ on:
         required: false
         type: boolean
         default: false
-  push:
-    branches:
-      - main
-    paths:
-      - package.json
-
 permissions:
   contents: read
 
@@ -236,17 +232,17 @@ jobs:
 
       - name: Staple, re-zip, regenerate blockmaps and the feed
         run: |
-          xcrun stapler staple release/OpenMausBot-*-arm64.dmg
-          xcrun stapler staple release/OpenMausBot-*-x64.dmg
+          xcrun stapler staple release/RuijieBot-*-mac-arm64.dmg
+          xcrun stapler staple release/RuijieBot-*-mac-x64.dmg
           xcrun stapler staple release/mac-arm64/OpenMausBot.app
           xcrun stapler staple release/mac/OpenMausBot.app
           v=$(node -p "require('./package.json').version")
-          rm -f "release/OpenMausBot-$v-arm64.zip" "release/OpenMausBot-$v-x64.zip"
-          ditto -c -k --sequesterRsrc --keepParent release/mac-arm64/OpenMausBot.app "release/OpenMausBot-$v-arm64.zip"
-          ditto -c -k --sequesterRsrc --keepParent release/mac/OpenMausBot.app "release/OpenMausBot-$v-x64.zip"
+          rm -f "release/RuijieBot-$v-mac-arm64.zip" "release/RuijieBot-$v-mac-x64.zip"
+          ditto -c -k --sequesterRsrc --keepParent release/mac-arm64/OpenMausBot.app "release/RuijieBot-$v-mac-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent release/mac/OpenMausBot.app "release/RuijieBot-$v-mac-x64.zip"
           node scripts/regenerate-blockmaps.mjs \
-            "release/OpenMausBot-$v-arm64.zip" "release/OpenMausBot-$v-x64.zip" \
-            "release/OpenMausBot-$v-arm64.dmg" "release/OpenMausBot-$v-x64.dmg"
+            "release/RuijieBot-$v-mac-arm64.zip" "release/RuijieBot-$v-mac-x64.zip" \
+            "release/RuijieBot-$v-mac-arm64.dmg" "release/RuijieBot-$v-mac-x64.dmg"
           # refreshes every hash from the post-staple bytes and refuses to
           # finish unless the feed matches the files on disk
           node scripts/regenerate-mac-feed.mjs
@@ -254,8 +250,8 @@ jobs:
       - name: Stable-named copies for the README's /latest/download links
         run: |
           v=$(node -p "require('./package.json').version")
-          cp "release/OpenMausBot-$v-arm64.dmg" release/OpenMausBot.dmg
-          cp "release/OpenMausBot-$v-x64.dmg" release/OpenMausBot-intel.dmg
+          cp "release/RuijieBot-$v-mac-arm64.dmg" release/RuijieBot.dmg
+          cp "release/RuijieBot-$v-mac-x64.dmg" release/RuijieBot-intel.dmg
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -294,7 +290,7 @@ jobs:
       - name: "Gate: packaged Windows server discovers its browser"
         env:
           OMB_SMOKE_DIST: ${{ github.workspace }}/release/win-unpacked/resources/server
-        run: node scripts/smoke-packaged-server.mjs --browser-bundle "${{ github.workspace }}/release/win-unpacked/resources/browser-engine"
+        run: node scripts/smoke-packaged-server.mjs --browser-default-enabled --browser-bundle "${{ github.workspace }}/release/win-unpacked/resources/browser-engine"
       - name: Verify the packaged tree and start the packaged server
         shell: bash
         run: |
@@ -310,7 +306,7 @@ jobs:
           "$res/cloudflared/cloudflared.exe" version | grep -Fq "cloudflared version 2026.8.2 " || {
             echo "::error::cloudflared has the wrong version"; exit 1; }
           [ -f "$res/app-update.yml" ] || { echo "::error::missing app-update.yml"; exit 1; }
-          grep -Eq '^owner: milind-soni$' "$res/app-update.yml" || { echo "::error::wrong update owner"; exit 1; }
+          grep -Eq '^owner: WYunS$' "$res/app-update.yml" || { echo "::error::wrong update owner"; exit 1; }
           grep -Eq '^repo: OpenMausBot$' "$res/app-update.yml" || { echo "::error::wrong update repo"; exit 1; }
           if grep -q "publisherName" "$res/app-update.yml"; then
             echo "::error::publisherName on an unsigned build breaks every update"; exit 1
@@ -330,7 +326,7 @@ jobs:
         shell: bash
         run: |
           v=$(node -p "require('./package.json').version")
-          cp "release/OpenMausBot-$v-setup.exe" release/OpenMausBot-setup.exe
+          cp "release/RuijieBot-$v-setup.exe" release/RuijieBot-setup.exe
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release
@@ -453,19 +449,20 @@ jobs:
           required=(
             latest-linux.yml latest-mac.yml latest.yml
             "OpenMausBot-$VERSION-amd64.deb"
-            "OpenMausBot-$VERSION-arm64.dmg"
-            "OpenMausBot-$VERSION-arm64.dmg.blockmap"
-            "OpenMausBot-$VERSION-arm64.zip"
-            "OpenMausBot-$VERSION-arm64.zip.blockmap"
-            "OpenMausBot-$VERSION-setup.exe"
-            "OpenMausBot-$VERSION-setup.exe.blockmap"
-            "OpenMausBot-$VERSION-x64.dmg"
-            "OpenMausBot-$VERSION-x64.dmg.blockmap"
-            "OpenMausBot-$VERSION-x64.zip"
-            "OpenMausBot-$VERSION-x64.zip.blockmap"
+            "RuijieBot-$VERSION-mac-arm64.dmg"
+            "RuijieBot-$VERSION-mac-arm64.dmg.blockmap"
+            "RuijieBot-$VERSION-mac-arm64.zip"
+            "RuijieBot-$VERSION-mac-arm64.zip.blockmap"
+            "RuijieBot-$VERSION-setup.exe"
+            "RuijieBot-$VERSION-setup.exe.blockmap"
+            "RuijieBot-$VERSION-mac-x64.dmg"
+            "RuijieBot-$VERSION-mac-x64.dmg.blockmap"
+            "RuijieBot-$VERSION-mac-x64.zip"
+            "RuijieBot-$VERSION-x64.zip"
+            "RuijieBot-$VERSION-mac-x64.zip.blockmap"
             "OpenMausBot-$VERSION-x86_64.AppImage"
-            OpenMausBot-amd64.deb OpenMausBot-intel.dmg OpenMausBot-setup.exe
-            OpenMausBot.AppImage OpenMausBot.dmg SHA256SUMS-ubuntu-x64.txt
+            RuijieBot-amd64.deb RuijieBot-intel.dmg RuijieBot-setup.exe
+            OpenMausBot.AppImage RuijieBot.dmg SHA256SUMS-ubuntu-x64.txt
           )
           for file in "${required[@]}"; do
             test -s "assets/$file" || { echo "::error::missing or empty release asset: $file"; exit 1; }
@@ -481,12 +478,12 @@ jobs:
           const sha512 = (f) => createHash("sha512").update(readFileSync(f)).digest("base64");
           const expected = new Map([
             ["latest-mac.yml", [
-              "OpenMausBot-${{ needs.prepare.outputs.version }}-x64.zip",
-              "OpenMausBot-${{ needs.prepare.outputs.version }}-arm64.zip",
-              "OpenMausBot-${{ needs.prepare.outputs.version }}-x64.dmg",
-              "OpenMausBot-${{ needs.prepare.outputs.version }}-arm64.dmg",
+              "RuijieBot-${{ needs.prepare.outputs.version }}-mac-x64.zip",
+              "RuijieBot-${{ needs.prepare.outputs.version }}-mac-arm64.zip",
+              "RuijieBot-${{ needs.prepare.outputs.version }}-mac-x64.dmg",
+              "RuijieBot-${{ needs.prepare.outputs.version }}-mac-arm64.dmg",
             ]],
-            ["latest.yml", ["OpenMausBot-${{ needs.prepare.outputs.version }}-setup.exe"]],
+            ["latest.yml", ["RuijieBot-${{ needs.prepare.outputs.version }}-setup.exe"]],
             ["latest-linux.yml", [
               "OpenMausBot-${{ needs.prepare.outputs.version }}-x86_64.AppImage",
               "OpenMausBot-${{ needs.prepare.outputs.version }}-amd64.deb",

@@ -16,6 +16,7 @@ import {
   ROUTINE_PROMPT,
   ROUTINE_EXECUTION_PROMPT,
   WEBHOOK_PROMPT,
+  RESPONSE_LANGUAGE_PROMPT,
 } from "./system-prompt.ts";
 
 describe("buildSystemPrompt", () => {
@@ -33,7 +34,7 @@ describe("buildSystemPrompt", () => {
 
     // memory and mentions differ between two turns of one live session, so a
     // driver holding a process open must not key that process on them
-    expect(built.stable).toBe("You are Kiwi. Search past sessions.");
+    expect(built.stable).toBe("You are Kiwi. Search past sessions." + RESPONSE_LANGUAGE_PROMPT);
     expect(built.volatile).toContain("likes tea");
     expect(built.volatile).toContain("@Fig");
     expect(built.volatile).not.toContain("Search past sessions");
@@ -45,10 +46,15 @@ describe("buildSystemPrompt", () => {
     expect(built.stable).toBe(built.text);
   });
 
-  it("is the persona alone when there is no soul and no parts", () => {
+  it("always includes the Chinese response policy even without soul or integrations", () => {
     const built = buildSystemPrompt("You are Kiwi.", "", []);
-    expect(built.text).toBe("You are Kiwi.");
-    expect(built.sections).toEqual([{ id: "persona", label: "Identity", text: "You are Kiwi.", bytes: 13 }]);
+    expect(built.text).toBe("You are Kiwi." + RESPONSE_LANGUAGE_PROMPT);
+    expect(built.sections).toEqual([
+      { id: "persona", label: "Identity", text: "You are Kiwi.", bytes: 13 },
+      { id: "response-language", label: "回复语言", text: RESPONSE_LANGUAGE_PROMPT, bytes: Buffer.byteLength(RESPONSE_LANGUAGE_PROMPT, 'utf8') },
+    ]);
+    expect(built.stable).toContain('默认使用简体中文');
+    expect(built.volatile).not.toContain('回复语言');
   });
 
   it("concatenates parts in order and drops empty ones, so an empty soul changes nothing", () => {
@@ -58,19 +64,19 @@ describe("buildSystemPrompt", () => {
       { id: "memory", label: "Memory", text: " Your memory file is X." },
     ];
     const built = buildSystemPrompt("You are Kiwi.", "", parts);
-    expect(built.text).toBe("You are Kiwi. You can act on the computer. Your memory file is X.");
-    expect(built.sections.map((s) => s.id)).toEqual(["persona", "computer", "memory"]);
+    expect(built.text).toBe("You are Kiwi. You can act on the computer. Your memory file is X." + RESPONSE_LANGUAGE_PROMPT);
+    expect(built.sections.map((s) => s.id)).toEqual(["persona", "computer", "memory", "response-language"]);
   });
 
   it("puts the soul block directly after the persona and measures it in bytes", () => {
     const built = buildSystemPrompt("You are Kiwi.", "Be brief. é", [
       { id: "memory", label: "Memory", text: " Your memory file is X." },
     ]);
-    expect(built.sections.map((s) => s.id)).toEqual(["persona", "soul", "memory"]);
+    expect(built.sections.map((s) => s.id)).toEqual(["persona", "soul", "memory", "response-language"]);
     const soul = built.sections[1]!;
     expect(soul.text).toBe(soulSystemPrompt("Be brief. é"));
     expect(soul.bytes).toBe(Buffer.byteLength(soul.text, "utf8"));
-    expect(built.text).toBe("You are Kiwi." + soul.text + " Your memory file is X.");
+    expect(built.text).toBe("You are Kiwi." + soul.text + " Your memory file is X." + RESPONSE_LANGUAGE_PROMPT);
   });
 });
 

@@ -2,19 +2,36 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { ARTIFACTS } from './runtime-artifacts.mjs';
+import { ARTIFACTS, ARTIFACTS_BY_TARGET } from './runtime-artifacts.mjs';
 import { checkApprovedArtifacts, validateApprovedArtifacts } from './runtime.mjs';
 
 const bundledManifest = async () => JSON.parse(await readFile(new URL('./licenses/manifest.json', import.meta.url)));
 
 test('bundled license review approves the exact production artifacts and all applicable notice bytes', async () => {
-  const notices = await checkApprovedArtifacts();
-  for (const kind of ['cli', 'node']) assert.ok(notices[kind].length > 0);
+  for (const target of Object.keys(ARTIFACTS_BY_TARGET)) {
+    const [platform, arch] = target.split('-');
+    const notices = await checkApprovedArtifacts(platform, arch);
+    for (const kind of ['cli', 'node']) assert.ok(notices[kind].length > 0, target);
+  }
+});
+
+test('Mac licenses are explicit per artifact; Windows or cross-architecture approvals fail closed', async () => {
+  const manifest = await bundledManifest();
+  for (const target of ['darwin-arm64', 'darwin-x64']) {
+    const artifacts = ARTIFACTS_BY_TARGET[target];
+    const review = manifest.targets[target];
+    const notices = validateApprovedArtifacts(review, artifacts);
+    assert.ok(notices.cli.some((file) => file.path === 'MAC_CLI_ADDITIONAL_NOTICES.txt'));
+    assert.ok(notices.node.some((file) => file.path === 'MAC_SOURCE_AVAILABILITY.md'));
+    assert.throws(() => validateApprovedArtifacts(manifest, artifacts), /LICENSE_REVIEW_REQUIRED/);
+    const other = target === 'darwin-arm64' ? 'darwin-x64' : 'darwin-arm64';
+    assert.throws(() => validateApprovedArtifacts(manifest.targets[other], artifacts), /LICENSE_REVIEW_REQUIRED/);
+  }
 });
 
 test('every bundled audit file matches its declared byte count and SHA-256', async () => {
   const manifest = await bundledManifest();
-  for (const file of manifest.files) {
+  for (const file of [manifest, ...Object.values(manifest.targets ?? {})].flatMap((review) => review.files)) {
     assert.match(file.path, /^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*)*\.(txt|json|md|crate)$/);
     const bytes = await readFile(new URL(`./licenses/${file.path}`, import.meta.url));
     assert.equal(bytes.length, file.bytes, file.path);

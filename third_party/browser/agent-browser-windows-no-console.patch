@@ -1,0 +1,74 @@
+RuijieBot Windows vendor revision 0.36.0-omb.2.
+Apply AFTER agent-browser-windows-stdio.patch; do not rewrite released omb.1.
+The detached daemon has no console. Its console-subsystem Chromium child
+otherwise allocates a visible Windows Terminal/console even when OMB hid the
+outer CLI. Hide native child consoles without changing Chromium sandboxing,
+stdio, process lifetime, profiles, or the upstream handle-inheritance fix.
+
+diff --git a/cli/src/native/cdp/chrome.rs b/cli/src/native/cdp/chrome.rs
+--- a/cli/src/native/cdp/chrome.rs
++++ b/cli/src/native/cdp/chrome.rs
+@@ -822,6 +822,12 @@
+     let mut cmd = Command::new(chrome_path);
++    // Modified by RuijieBot: a detached daemon must not allocate a console
++    // when launching the Windows console-subsystem headless shell.
++    #[cfg(windows)] {
++        use std::os::windows::process::CommandExt;
++        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW, not DETACHED_PROCESS
++    }
+     cmd.args(&args)
+         .stdin(Stdio::null())
+         .stdout(Stdio::null())
+         .stderr(Stdio::piped());
+ 
+diff --git a/cli/src/mcp.rs b/cli/src/mcp.rs
+--- a/cli/src/mcp.rs
++++ b/cli/src/mcp.rs
+@@ -3742,6 +3742,11 @@
+     let mut command = Command::new(exe);
++    // Modified by RuijieBot: nested CLI calls also run without a console.
++    #[cfg(windows)] {
++        use std::os::windows::process::CommandExt;
++        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
++    }
+     command
+         .args(args)
+         .stdout(Stdio::piped())
+         .stderr(Stdio::piped())
+         .stdin(if stdin_body.is_some() {
+diff --git a/cli/src/main.rs b/cli/src/main.rs
+--- a/cli/src/main.rs
++++ b/cli/src/main.rs
+@@ -550,5 +550,11 @@
+-    let output = Command::new("git")
++    // Modified by RuijieBot: project discovery is a background probe.
++    let mut command = Command::new("git");
++    #[cfg(windows)] {
++        use std::os::windows::process::CommandExt;
++        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
++    }
++    let output = command
+         .args(["rev-parse", "--show-toplevel"])
+         .output()
+         .ok()?;
+     if !output.status.success() {
+diff --git a/cli/Cargo.toml b/cli/Cargo.toml
+--- a/cli/Cargo.toml
++++ b/cli/Cargo.toml
+@@ -2,5 +2,5 @@
+ [package]
+ name = "agent-browser"
+-version = "0.36.0-omb.1"
++version = "0.36.0-omb.2"
+ edition = "2021"
+ description = "Fast browser automation CLI for AI agents"
+diff --git a/cli/Cargo.lock b/cli/Cargo.lock
+--- a/cli/Cargo.lock
++++ b/cli/Cargo.lock
+@@ -46,5 +46,5 @@
+ [[package]]
+ name = "agent-browser"
+-version = "0.36.0-omb.1"
++version = "0.36.0-omb.2"
+ dependencies = [
+  "aes-gcm",

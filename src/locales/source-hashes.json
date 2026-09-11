@@ -9930,6 +9930,9 @@
       "remote.signInAccess.error": "71a471a7b15e8647dda8cab60737a1b41901bdcbe3be10f477a9163b723f4e1d"
     },
     "zh": {
+      "connectors.networkUnavailable": "92d017ce9dd4cea59eb7a73b8975e825b564d5832affe30be27a891e6d619ade",
+      "connectors.serviceUnavailable": "fdb6106b7ca259124d0228c8b354c3ba77e7dd07bcfc7de6bf9208a156f98407",
+      "connectors.connectingService": "85c8f35d08fd2ad80601bdcf316ef50ce1e5e4b38e4f11e88f365a0269f47ad1",
       "noEngines.title": "af88855a5f80377de709995229ba3907df9e8fb3b940fbf7c0d9cbe6eea54afe",
       "noEngines.intro": "771dc420a107df9c9df61b2ee02d2bd30860060d482e9b7918e67082a28744fe",
       "engines.cloud": "b977b950c1ae31e5aeb9ef778cc20a66fc034eb81e738e0206104b677962c465",

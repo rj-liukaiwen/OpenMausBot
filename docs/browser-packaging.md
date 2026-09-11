@@ -85,12 +85,19 @@ Windows uses an explicitly identified OpenMausBot build of agent-browser
 0.36.0, with the handle-inheritance fix from
 [upstream PR #1781](https://github.com/vercel-labs/agent-browser/pull/1781).
 The official 0.37.0 release does not contain this fix, so Windows stays on the
-native-verified `0.36.0-omb.1` revision and does not yet get the new recording
+native-tested `0.36.0-omb.2` revision and does not yet get the new recording
 options. Do not replace it with the unpatched 0.37.0 Windows binary.
 The original binary can hang when a newly started background browser holds
 the tool call's output connection open. The backport changes that Windows
 startup behavior; it does not include the PR's broader output-reader rewrite
 or unrelated changes from upstream main.
+
+The `.2` revision also suppresses console windows in native Chromium, nested
+MCP and Git discovery. The exact reviewed binary is currently supplied locally
+through `OMB_BROWSER_VENDOR_DIR` (or `dist-native/browser-vendor-candidate-omb2`),
+not a fictitious published URL. Preparation rejects absent/mismatching bytes
+instead of falling back to `.1`. Full UI/package-combination acceptance remains
+pending; the candidate's previous native pass is not a release receipt.
 
 The artifact-only **Windows browser vendor build** workflow builds the pinned
 source and checked-in patch, retains the licenses and build provenance, and
@@ -105,6 +112,31 @@ The Windows revision has a separate managed installation directory so an old
 their bundled engine. Explicit executable overrides remain user-managed.
 Remove the backport when an official release includes the fix and passes the
 same native cold-start and restart tests.
+
+The vendor builder currently emits an **unreleased `0.36.0-omb.2` candidate**.
+It applies `agent-browser-windows-no-console.patch` after the original stdio
+patch. Hiding the outer Node child does not hide console-subsystem descendants:
+the detached daemon must also request `CREATE_NO_WINDOW` when starting
+Chromium Headless Shell, nested MCP commands and its Git probe.
+Released application pins remain `.1`; building a candidate alone does not
+update installed or development copies. On an idle interactive Windows desktop,
+run the original bundled-browser workflow with candidate bytes explicitly:
+
+```powershell
+./scripts/verify-browser-no-console.ps1 -Resources 'C:/absolute/app/resources' -EngineCandidate 'D:/absolute/candidate/agent-browser-win32-x64.exe'
+```
+
+Require a successful browser workflow and zero new visible console windows,
+then repeat and verify the full desktop UI. The 10 ms window poll is conservative
+about unrelated terminals and cannot prove the absence of arbitrarily short
+flashes. A headless CI run is not equivalent to interactive desktop evidence.
+After validation, publish a distinct vendor revision and review its exact pins;
+do not fabricate a digest/URL or silently package an unverified override.
+The builder creates an isolated Git boundary in its extracted source: a temp
+directory inside a user's unrelated Git repository otherwise allows `git apply`
+to skip all paths and still exit successfully. It verifies reverse applicability,
+the actual source version and no-console call sites before compilation. Hashing
+the patch alone does not prove that the resulting executable contains it.
 
 Complete upstream notices and provenance are in
 [`third_party/browser`](../third_party/browser/README.md). The full Google

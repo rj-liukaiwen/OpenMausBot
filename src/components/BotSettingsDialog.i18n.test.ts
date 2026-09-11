@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -20,6 +21,13 @@ const bot = {
 } as never as Bot;
 
 describe("Bot settings localization", () => {
+  it("keeps the close control in a non-shrinking hit area", () => {
+    const source = readFileSync(new URL("./BotSettingsDialog.tsx", import.meta.url), "utf8");
+    expect(source).toMatch(/className="relative z-10 flex shrink-0 items-center justify-between bg-panel px-5 py-3"/);
+    expect(source).toMatch(/className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md/);
+    expect(source).toMatch(/onMouseDown=\{\(event\) => \{[\s\S]*?toggleSettings", open: false/);
+    expect(source).toMatch(/<X size=\{18\} className="pointer-events-none"/);
+  });
   it("translates every first-level section into Chinese", () => {
     setLocale("zh");
     expect(botSettingsSections().map(({ label }) => label)).toEqual([

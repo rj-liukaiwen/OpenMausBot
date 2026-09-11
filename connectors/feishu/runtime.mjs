@@ -7,9 +7,10 @@ import { spawn } from 'node:child_process';
 import { inflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { ARTIFACTS, NOTICE } from './runtime-artifacts.mjs';
+import { ARTIFACTS, NOTICE, runtimeArtifacts } from './runtime-artifacts.mjs';
+import { extractPinnedTarExecutable, nativeExecutable } from './native-format.mjs';
 
-const MAX_BYTES = 100 * 1024 * 1024;
+const MAX_BYTES = 160 * 1024 * 1024;
 const LICENSES_ROOT = fileURLToPath(new URL('./licenses/', import.meta.url));
 const MAX_NOTICE_BYTES = 8 * 1024 * 1024;
 const queues = new Map();
@@ -226,7 +227,7 @@ export function validateApprovedArtifacts(manifest, artifacts = ARTIFACTS, kinds
     const artifact = artifacts[kind];
     const reviewed = manifest.artifacts?.[kind];
     require(reviewed && reviewed.version === artifact.version &&
-      reviewed.platform === (kind === 'cli' ? 'windows-amd64' : 'win32-x64') &&
+      reviewed.platform === (artifact.platform ?? (kind === 'cli' ? 'windows-amd64' : 'win32-x64')) &&
       reviewed.executableSha256 === artifact.executableSha256 &&
       (artifact.member ? reviewed.archiveSha256 === artifact.sha256 : reviewed.executableSha256 === artifact.sha256));
     require(Array.isArray(reviewed.noticeFiles) && reviewed.noticeFiles.length > 0 &&
@@ -262,14 +263,16 @@ export function validateApprovedArtifacts(manifest, artifacts = ARTIFACTS, kinds
 }
 
 /** Read only packaged files. No notice URL is ever fetched at runtime. */
-export async function checkApprovedArtifacts() {
-  return approvedNotices(LICENSES_ROOT, ARTIFACTS, ['cli', 'node']);
+export async function checkApprovedArtifacts(platform = process.platform, arch = process.arch) {
+  return approvedNotices(LICENSES_ROOT, runtimeArtifacts(platform, arch), ['cli', 'node']);
 }
 
 async function approvedNotices(licensesRoot, artifacts, kinds) {
   try {
     const manifest = JSON.parse(await readRegular(path.join(licensesRoot, 'manifest.json'), 1024 * 1024));
-    const notices = validateApprovedArtifacts(manifest, artifacts, kinds);
+    const review = artifacts.cli.platform?.startsWith('darwin-')
+      ? manifest.targets?.[artifacts.node.platform] : manifest;
+    const notices = validateApprovedArtifacts(review, artifacts, kinds);
     for (const files of Object.values(notices)) {
       for (const file of files) {
         file.contents = await readRegular(path.join(licensesRoot, file.path), file.bytes);
@@ -285,17 +288,12 @@ async function approvedNotices(licensesRoot, artifacts, kinds) {
   }
 }
 
-function nativeX64(bytes) {
-  if (bytes.length < 64 || bytes.readUInt16LE(0) !== 0x5a4d) return false;
-  const pe = bytes.readUInt32LE(0x3c);
-  return pe >= 64 && pe + 26 <= bytes.length && bytes.readUInt32LE(pe) === 0x4550 &&
-    bytes.readUInt16LE(pe + 4) === 0x8664 && (bytes.readUInt16LE(pe + 22) & 2) !== 0 &&
-    (bytes.readUInt16LE(pe + 22) & 0x2000) === 0 && bytes.readUInt16LE(pe + 24) === 0x20b;
-}
+const nativeX64 = (bytes) => nativeExecutable(bytes, 'win32', 'x64');
 
 // Read the central directory and local headers, but inflate ONLY the pinned
 // member. No archive-provided path is ever passed to filesystem operations.
-function extractExecutable(zip, member, digest) {
+export function extractPinnedExecutable(zip, member, digest) {
+  const zipLimit = 100 * 1024 * 1024;
   const bad = () => { throw error('INVALID_ZIP'); };
   const range = (offset, size, end = zip.length) => {
     if (offset < 0 || size < 0 || offset + size > end) bad();
@@ -345,7 +343,7 @@ function extractExecutable(zip, member, digest) {
     const name = nameBytes.toString('utf8');
     const type = (attributes >>> 16) & 0xf000;
     if (zip.readUInt16LE(cursor + 6) > 20 || flags & ~0x808 || ![0, 8].includes(method) ||
-        zip.readUInt16LE(cursor + 34) || packed > MAX_BYTES || size > MAX_BYTES ||
+        zip.readUInt16LE(cursor + 34) || packed > zipLimit || size > zipLimit ||
         !/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\/?$/.test(name) ||
         name.split('/').some((part) => part === '.' || part === '..') ||
         names.has(name.toLowerCase()) || (type && type !== 0x8000 && type !== 0x4000)) bad();
@@ -517,18 +515,22 @@ async function download(artifact, destination, fetchImpl, signal, timeoutMs) {
   }
 }
 
-function provisioner({ root, env = process.env, fetchImpl = fetch, spawnImpl = spawn } = {},
-  { platform = process.platform, arch = process.arch, artifacts = ARTIFACTS,
+function provisioner({ root, bundledRoot, verifySignedBundle, env = process.env, fetchImpl = fetch, spawnImpl = spawn } = {},
+  { platform = process.platform, arch = process.arch, artifacts,
     licensesRoot = LICENSES_ROOT, downloadTimeoutMs = 120000, versionTimeoutMs = 10000,
     processKill = process.kill.bind(process) } = {}) {
   if (!safeAbsolute(root) || root !== path.resolve(root) || root === path.parse(root).root) throw error('INVALID_ROOT');
+  if (bundledRoot !== undefined && (!safeAbsolute(bundledRoot) || bundledRoot !== path.resolve(bundledRoot) ||
+      bundledRoot === path.parse(bundledRoot).root || pathKey(bundledRoot) === pathKey(root) ||
+      pathKey(bundledRoot).startsWith(`${pathKey(root)}${path.sep}`))) throw error('INVALID_BUNDLED_ROOT');
   const context = path.join(root, 'context');
   const runtime = path.join(root, 'runtime');
   const childEnv = childEnvironment(env, platform);
 
   async function prepare({ existing = {}, signal, onPhase = () => {} } = {}) {
     checkAbort(signal);
-    if (platform !== 'win32' || arch !== 'x64') throw error('UNSUPPORTED_PLATFORM');
+    artifacts ??= runtimeArtifacts(platform, arch);
+    const native = (bytes) => nativeExecutable(bytes, platform, arch);
     if (!existing || typeof existing !== 'object' || Array.isArray(existing) ||
         (signal !== undefined && !(signal instanceof AbortSignal)) || typeof onPhase !== 'function') {
       throw error('INVALID_ARGUMENTS');
@@ -549,9 +551,11 @@ function provisioner({ root, env = process.env, fetchImpl = fetch, spawnImpl = s
     const candidates = (kind) => {
       const saved = existing[`${kind}Path`];
       const name = artifacts[kind].name;
-      const paths = [saved];
+      const paths = [];
+      if (bundledRoot) paths.push(path.join(bundledRoot, artifacts[kind].directory, name));
+      paths.push(saved);
       const userPath = Object.entries(env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? '';
-      for (const directory of userPath.split(';')) {
+      for (const directory of userPath.split(platform === 'win32' ? ';' : ':')) {
         if (!safeAbsolute(directory)) continue;
         paths.push(path.join(directory, name));
         if (kind === 'cli') paths.push(path.join(directory, 'node_modules', '@larksuite', 'cli', 'bin', name));
@@ -563,11 +567,24 @@ function provisioner({ root, env = process.env, fetchImpl = fetch, spawnImpl = s
     const detect = async (kind) => {
       for (const file of candidates(kind)) {
         checkAbort(signal);
+        const bundled = bundledRoot && pathKey(file) === pathKey(path.join(
+          bundledRoot, artifacts[kind].directory, artifacts[kind].name,
+        ));
         try {
-          if (nativeX64(await readRegular(file)) &&
-              await version(file, kind, spawnImpl, childEnv, signal, versionTimeoutMs)) return file;
+          const bytes = await readRegular(file);
+          const trustedBytes = !bundled || sha256(bytes) === artifacts[kind].executableSha256 ||
+            (platform === 'darwin' && typeof verifySignedBundle === 'function' &&
+              await verifySignedBundle(file, { signal }));
+          // A damaged packaged runtime must not silently select a developer's
+          // PATH copy or download replacement bytes after signature failure.
+          if (bundled && (!native(bytes) || !trustedBytes)) throw error('CHECKSUM_MISMATCH');
+          if (native(bytes) && trustedBytes &&
+              await version(file, kind, spawnImpl, childEnv, signal, versionTimeoutMs,
+                bundled ? artifacts[kind].version : undefined)) return file;
+          if (bundled) throw error('INCOMPATIBLE_RUNTIME');
         } catch (cause) {
           checkAbort(signal);
+          if (bundled) throw ['ENOENT', 'ENOTDIR'].includes(cause.code) ? error('BUNDLED_RUNTIME_MISSING') : cause;
           if (!['ENOENT', 'ENOTDIR', 'UNSAFE_PATH', 'SIZE_LIMIT', 'VERSION_TIMEOUT', 'EACCES'].includes(cause.code)) throw cause;
         }
       }
@@ -611,7 +628,7 @@ function provisioner({ root, env = process.env, fetchImpl = fetch, spawnImpl = s
                 const installed = await readRegular(path.join(destination, 'licenses', file.path), file.bytes);
                 if (installed.length !== file.bytes || sha256(installed) !== file.sha256) noticesValid = false;
               }
-              if (sha256(bytes) === artifact.executableSha256 && nativeX64(bytes) &&
+              if (sha256(bytes) === artifact.executableSha256 && native(bytes) &&
                   sha256(license) === artifact.license.sha256 && notice.toString() === NOTICE && noticesValid &&
                   await version(executable, kind, spawnImpl, childEnv, signal, versionTimeoutMs, artifact.version)) {
                 checkAbort(signal);
@@ -628,9 +645,11 @@ function provisioner({ root, env = process.env, fetchImpl = fetch, spawnImpl = s
             const payload = path.join(stage, 'payload');
             await download(artifact, payload, fetchImpl, signal, downloadTimeoutMs);
             const bytes = await readRegular(payload);
-            const exeBytes = artifact.member ? extractExecutable(bytes, artifact.member, artifact.executableSha256) : bytes;
+            const exeBytes = artifact.format === 'tar.gz'
+              ? extractPinnedTarExecutable(bytes, artifact.member, artifact.executableSha256, platform, arch)
+              : artifact.member ? extractPinnedExecutable(bytes, artifact.member, artifact.executableSha256) : bytes;
             if (sha256(exeBytes) !== artifact.executableSha256) throw error('CHECKSUM_MISMATCH');
-            if (!nativeX64(exeBytes)) throw error('INVALID_EXECUTABLE');
+            if (!native(exeBytes)) throw error('INVALID_EXECUTABLE');
             const stagedExe = path.join(stage, artifact.name);
             const handle = await open(stagedExe, 'wx', 0o700);
             try { await handle.writeFile(exeBytes); await handle.sync(); } finally { await handle.close(); }
@@ -708,7 +727,7 @@ function provisioner({ root, env = process.env, fetchImpl = fetch, spawnImpl = s
   };
 }
 
-/** Host-only, Windows x64. Provisions runtime only; never initializes/authenticates an app. */
+/** Host-only Windows x64/macOS arm64/x64; never initializes/authenticates an app. */
 export function createRuntimeProvisioner(options) {
   return provisioner(options);
 }

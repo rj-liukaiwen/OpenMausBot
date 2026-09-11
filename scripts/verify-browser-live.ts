@@ -11,6 +11,7 @@ if (!binaryPath || !executablePath) throw new Error("Set OMB_VERIFY_BROWSER_BINA
 const fixture = await launchVerificationServer(process.env, undefined, undefined, { binaryPath, executablePath });
 let ui: MountedPreview | undefined;
 let botId = "";
+let pageVisits = 0;
 try {
   await runControlOmb(["new-bot", "--name", "Pepper", "--url", fixture.info.url]);
   const { bots } = await (await fetch(`${fixture.info.url}/api/bots`)).json() as any;
@@ -23,7 +24,8 @@ try {
       path: "/__browser-test-page",
       handler(_req, res) {
         res.setHeader("content-type", "text/html");
-        res.end(readFileSync(new URL("./testing/browser-test-page.html", import.meta.url), "utf8"));
+        res.end(readFileSync(new URL("./testing/browser-test-page.html", import.meta.url), "utf8")
+          .replace('A browser for your bots.', `A browser for your bots. Visit ${++pageVisits}`));
       },
     }],
   });

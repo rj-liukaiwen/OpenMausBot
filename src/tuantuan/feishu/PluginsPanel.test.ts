@@ -20,3 +20,11 @@ it("mounts Feishu before Composio has returned any catalog or inventory", () => 
   expect(html).toContain(t("connectors.loadingCatalog"));
   expect(html.match(/role="dialog"/g)).toHaveLength(1);
 });
+
+it("does not label a local Mac Feishu bridge unsupported before the cloud catalog loads", () => {
+  vi.stubGlobal("window", { ogb: { platform: "darwin", feishu: { state: vi.fn(), invoke: vi.fn() } } });
+  const html = renderToStaticMarkup(createElement(PluginsPanel));
+  expect(html).toContain(feishuCopy.title);
+  expect(html).not.toContain(feishuCopy.unsupported);
+  expect(html).toContain(t("connectors.loadingCatalog"));
+});

@@ -5,13 +5,28 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { browserBundlePaths, browserBundleSpec, CHROME_VERSION, SUPPORTED_BROWSER_TARGETS } from "../server/browser-bundle-release.ts";
 import { resolveAgentBrowserReleaseAsset } from "../server/browser-engine-release.ts";
-import { BROWSER_LICENSE_FILES, browserExtractionCommand, bundleInventory, parsePrepareBrowserArgs, releaseBytes, renameWithWindowsRetry, stageBrowserTarget, targetsForPreparation, verifyAssetBytes, verifyBrowserBundle, verifyBundleInventory } from "./prepare-browser.mjs";
+import { archiveBrowserRuntimeLog, BROWSER_LICENSE_FILES, browserExtractionCommand, bundleInventory, parsePrepareBrowserArgs, releaseBytes, renameWithWindowsRetry, stageBrowserTarget, targetsForPreparation, verifyAssetBytes, verifyBrowserBundle, verifyBundleInventory } from "./prepare-browser.mjs";
 
 const fixtures = [];
 function fixture() { const root = mkdtempSync(join(tmpdir(), "omb-browser-prepare-test-")); fixtures.push(root); return root; }
 afterEach(() => { vi.unstubAllGlobals(); for (const root of fixtures.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe("pinned desktop browser preparation", () => {
+  it('archives only the known extra runtime log while strict package verification still rejects it', () => {
+    const root = fixture(), archiveRoot = fixture();
+    const chrome = join(root, 'chrome/chrome-headless-shell-win64'); mkdirSync(chrome, { recursive: true });
+    const executable = join(chrome, 'chrome-headless-shell.exe'); writeFileSync(executable, 'pinned bytes');
+    const files = bundleInventory(root);
+    const log = join(chrome, 'debug.log'); writeFileSync(log, 'fixture diagnostics');
+    expect(() => verifyBundleInventory(root, files)).toThrow(/modified/);
+    const archived = archiveBrowserRuntimeLog(root, files, archiveRoot);
+    expect(readFileSync(archived, 'utf8')).toBe('fixture diagnostics');
+    expect(() => verifyBundleInventory(root, files)).not.toThrow();
+    writeFileSync(log, 'keep this evidence'); writeFileSync(executable, 'tampered');
+    expect(archiveBrowserRuntimeLog(root, files, archiveRoot)).toBeNull();
+    expect(readFileSync(log, 'utf8')).toBe('keep this evidence');
+    expect(() => verifyBundleInventory(root, files)).toThrow(/modified/);
+  });
   it("pins the exact headless vendor archives for only shipped targets", () => {
     expect(CHROME_VERSION).toBe("152.0.7977.82");
     expect(SUPPORTED_BROWSER_TARGETS).toEqual(["darwin-arm64", "darwin-x64", "linux-x64", "win32-x64"]);
@@ -85,6 +100,13 @@ describe("pinned desktop browser preparation", () => {
     await expect(releaseBytes(asset, root)).rejects.toThrow(/SHA-256/);
     expect(fetch).not.toHaveBeenCalled();
     expect(() => verifyAssetBytes(bytes.subarray(1), asset)).toThrow(/size/);
+  });
+
+  it("never downloads an older engine when the pinned local Windows dependency is absent", async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    const spec = browserBundleSpec('win32-x64');
+    await expect(releaseBytes(spec.engine, fixture())).rejects.toThrow(/Missing pinned local dependency/);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("detects modified, missing and unexpected resource files", () => {

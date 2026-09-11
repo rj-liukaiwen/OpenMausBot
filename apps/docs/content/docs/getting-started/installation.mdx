@@ -12,7 +12,7 @@ Choose your computer below. Each link always downloads the latest published buil
 |---|---|---|
 | macOS Apple silicon | [Download `.dmg`](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot.dmg) | Signed and notarized. Drag to Applications. |
 | macOS Intel | [Download `.dmg`](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot-intel.dmg) | Signed and notarized. |
-| Windows x64 | [Download installer](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot-setup.exe) | Per-user installer; Windows signing is not yet available. |
+| Windows x64 | [Download installer](https://github.com/milind-soni/OpenMausBot/releases/latest/download/RuijieBot-setup.exe) | Per-user installer; Windows signing is not yet available. |
 | Ubuntu 24.04 x64 | [Download `.deb`](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot-amd64.deb) · [AppImage](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot.AppImage) | The `.deb` is recommended; the AppImage is portable. |
 
 <Callout type="warn" title="Windows SmartScreen">
@@ -51,4 +51,4 @@ pnpm dev:desktop
 
 ## Where data lives
 
-OpenMausBot stores its application data under `~/.openmausbot`. Electron window and browser data use the normal per-platform application data directory.
+Source and CLI builds store application data under `~/.openmausbot`. Packaged RuijieBot builds use the isolated `~/.ruijiebot` directory on Windows and macOS. Electron window and browser data use the normal per-platform application data directory.

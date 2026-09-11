@@ -3,7 +3,9 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createInterface } from "node:readline";
-import { delimiter, dirname } from "node:path";
+import { delimiter, dirname, basename, join } from "node:path";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { gatedLocalComputer } from "./local-computer.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
@@ -27,6 +29,25 @@ readline.createInterface({input: process.stdin}).on("line", (line) => {
 `;
 
 describe("local computer proxy (isolated child and control endpoint)", () => {
+  it("runs discovery when its entry path uses a directory alias, as in macOS /var", () => {
+    const fixture = mkdtempSync(join(tmpdir(), "omb-proxy-alias-"));
+    try {
+      const alias = join(fixture, "aliased-server");
+      symlinkSync(dirname(SPAWNED_PROXIES.localComputer), alias, process.platform === "win32" ? "junction" : "dir");
+      const result = spawnSync(process.execPath, [join(alias, basename(SPAWNED_PROXIES.localComputer))], {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", OMB_CUA_COMMAND: process.execPath,
+          OMB_CUA_ARGS: JSON.stringify(["-e", FAKE_DRIVER]), OMB_CONTROL_URL: "http://127.0.0.1:1/control",
+          OMB_CONTROL_TOKEN: "isolated-alias-token" },
+        input: `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`,
+        encoding: "utf8", timeout: 10_000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim(), "Proxy exited without executing its entry point through the directory alias").not.toBe("");
+      expect(JSON.parse(result.stdout.trim()).result.forwarded).toBe("tools/list");
+    } finally { rmSync(fixture, { recursive: true, force: true }); }
+  });
+
   it("keeps the observed computer MCP alive when its parent closes stderr", async () => {
     const driver = `
       const readline = require("node:readline");

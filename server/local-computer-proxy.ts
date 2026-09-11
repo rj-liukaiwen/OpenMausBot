@@ -2,7 +2,7 @@
 // but observes raw screenshots before Harness projects them for a text-only
 // model. Controlled apps keep the native desktop's normal foreground behavior.
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { augmentedPath } from "./env-path.ts";
@@ -404,6 +404,9 @@ export function runLocalComputerProxy(): void {
   for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => { restorer?.close(); child.kill(signal); });
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url).toLowerCase() === process.argv[1].toLowerCase()) {
+// Node resolves import.meta.url through symlinks, while argv can retain a path
+// such as macOS /var/... (whose real path is /private/var/...). Compare the
+// canonical paths or the packaged CLI silently exits without serving requests.
+if (process.argv[1] && realpathSync(fileURLToPath(import.meta.url)).toLowerCase() === realpathSync(process.argv[1]).toLowerCase()) {
   runLocalComputerProxy();
 }

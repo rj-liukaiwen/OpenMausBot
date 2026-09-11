@@ -92,13 +92,16 @@ jobs:
         run: |
           pnpm typecheck
           node --test --test-isolation=none electron/private-release.node-test.mjs electron/ruijie-package-config.node-test.mjs
-          pnpm exec vitest run server/browser-engine.test.ts server/browser-navigation.test.ts server/browser-live.test.ts server/browser-runtime.test.ts
+          pnpm exec vitest run server/browser-engine.test.ts server/browser-navigation.test.ts server/browser-live.test.ts server/browser-runtime.test.ts server/local-computer-proxy-gate.test.ts server/local-computer-proxy.test.ts
           pnpm test:packaged-server
       - name: Prepare compiled app and native resources
         run: pnpm package:prepare
       - name: Package Windows
         if: matrix.platform == 'windows'
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           pnpm build:cua:windows
           pnpm exec electron-builder --config electron-builder.testing.mjs --win --x64 --publish never
       - name: Confirm unsigned Windows installer
@@ -175,6 +178,7 @@ jobs:
         run: |
           pnpm typecheck
           node --test --test-isolation=none electron/private-release.node-test.mjs electron/ruijie-package-config.node-test.mjs
+          pnpm exec vitest run server/local-computer-proxy-gate.test.ts server/local-computer-proxy.test.ts
           pnpm test:packaged-server
       - name: Build both native input slices
         run: |

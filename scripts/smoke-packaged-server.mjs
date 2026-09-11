@@ -25,11 +25,11 @@ const browserBundle = values["browser-bundle"];
 let browserSpec;
 if (browserBundle !== undefined) {
   assert(isAbsolute(browserBundle), "--browser-bundle must be an absolute staged browser target directory");
-  const manifest = JSON.parse(readFileSync(join(browserBundle, "manifest.json"), "utf8"));
+  const paths = browserBundlePaths(browserBundle, `${process.platform}-${process.arch}`);
+  const manifest = JSON.parse(readFileSync(paths.manifest, "utf8"));
   browserSpec = browserBundleSpec(manifest.target);
   assert.equal(manifest.target, `${process.platform}-${process.arch}`, "--browser-bundle must match this Node host's platform and architecture");
   assert.equal(manifest.schemaVersion, browserSpec.schemaVersion, "Unsupported browser bundle manifest");
-  const paths = browserBundlePaths(browserBundle, manifest.target);
   for (const component of ["engine", "chrome"]) {
     assert.equal(manifest[component]?.version, browserSpec[component].version);
     assert.equal(manifest[component]?.executable, browserSpec[component].executable);
@@ -295,6 +295,7 @@ for (const card of catalogReport.cards) {
   assert.equal(card.logo, `https://logos.composio.dev/api/${card.slug}`, "Packaged fallback must use original upstream brand images");
 }
 assert.equal(computerReport.code, 0, `packaged computer proxy crashed with closed stderr: ${JSON.stringify(computerReport)}`);
+assert(computerReport.stdout.trim(), `packaged computer proxy exited without a discovery response: ${JSON.stringify(computerReport)}`);
 assert.equal(JSON.parse(computerReport.stdout.trim()).result.tools[0].name, "list_windows");
 console.log(`packaged server started with no node_modules in reach (port ${port}) ✓`);
 console.log(`all ${count} spawned proxy paths resolve inside the packaged server dir ✓`);

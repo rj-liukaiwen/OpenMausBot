@@ -1,0 +1,21 @@
+name: 从构建生成 Release
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: 成功构建的运行编号（Actions 链接 runs/ 后的数字）
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  release:
+    permissions:
+      contents: write
+      actions: read
+    uses: rj-liukaiwen/release-kit/.github/workflows/promote.yml@b23214d1009ad091751836b80805a1bde1db4110
+    with:
+      toolkit_sha: b23214d1009ad091751836b80805a1bde1db4110
+      build_run: ${{ inputs.build_run }}
+      mode: draft

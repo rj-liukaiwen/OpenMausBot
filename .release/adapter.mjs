@@ -25,7 +25,7 @@ export async function preflight() {
   return { blockers, notes: ['Uses existing fork evaluation policy; production acceptance remains separate.', 'Windows vendor retains pinned archive and executable hashes.', 'macOS Feishu original bytes are preserved; both architecture runtimes are executed.', 'Human account, TCC and upgrade acceptance is not performed by this automation.'] };
 }
 export async function prepareFiles(ctx) {
-  return [{ path: 'build/private-release.json', content: JSON.stringify({ schemaVersion: 1, version: ctx.version, sourceSha: ctx.sourceSha, upstreamSha: 'd7cd142712c11f44a7a13d9e75c8d31ad9799891', repository: 'rj-liukaiwen/OpenMausBot', workflowRun: process.env.GITHUB_RUN_ID, signing: { windows: 'unsigned', macos: 'ad-hoc signed, not notarized' }, usage: 'public test candidate; Enterprise redistribution authorized by repository owner', humanAcceptance: 'skipped-by-owner', acceptancePolicy: 'legacy-evaluation', dataDirectory: '~/.ruijiebot' }, null, 2) + '\n' }];
+  return [{ path: 'build/private-release.json', content: JSON.stringify({ schemaVersion: 1, version: ctx.version, sourceSha: ctx.sourceSha, repository: 'rj-liukaiwen/OpenMausBot', workflowRun: process.env.GITHUB_RUN_ID, signing: { windows: 'unsigned', macos: 'ad-hoc signed, not notarized' }, usage: 'public test candidate; Enterprise redistribution authorized by repository owner', humanAcceptance: 'skipped-by-owner', acceptancePolicy: 'legacy-evaluation', dataDirectory: '~/.ruijiebot' }, null, 2) + '\n' }];
 }
 export async function install() { pnpm(['install', '--frozen-lockfile']); }
 export async function build(ctx) {

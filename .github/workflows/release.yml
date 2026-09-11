@@ -6,14 +6,14 @@ on:
         description: 版本号
         required: true
         type: string
-        default: v0.1.74
+        default: v0.1.75
       source_ref:
         description: 本仓库的分支或提交
         default: main
         type: string
       mode:
-        description: 当前先通过预检；缺项会显示在运行摘要中
-        default: check
+        description: 预检、仅下载包或生成 Release 草稿
+        default: draft
         type: choice
         options: [check, artifacts, draft]
 permissions:
@@ -22,9 +22,9 @@ jobs:
   release:
     permissions:
       contents: write
-    uses: rj-liukaiwen/release-kit/.github/workflows/desktop.yml@88e87d9032863e13062b2d5c60a8c03257269c36
+    uses: rj-liukaiwen/release-kit/.github/workflows/desktop.yml@99e9ba013465693de6a66129abc0ef3b5f8648be
     with:
-      toolkit_sha: 88e87d9032863e13062b2d5c60a8c03257269c36
+      toolkit_sha: 99e9ba013465693de6a66129abc0ef3b5f8648be
       version: ${{ inputs.version }}
       source_ref: ${{ inputs.source_ref }}
       mode: ${{ inputs.mode }}

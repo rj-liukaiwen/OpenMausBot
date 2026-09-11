@@ -40,3 +40,6 @@ deploy/podman/.env
 deploy/podman/.env.*
 !deploy/podman/.env.example
 /.env
+
+.release-kit/
+.release-out/

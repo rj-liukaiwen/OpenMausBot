@@ -42,3 +42,12 @@ Run: https://github.com/rj-liukaiwen/OpenMausBot/actions/runs/34552772665, workf
 - Linux passed native X11 input, package content, DEB installation/upgrade, browser, and packaged-server checks. The renderer smoke still expected the upstream title although this branch's UI is named 锐捷Bot. It now checks the exact title from this branch's source UI, retaining the remaining lifecycle and native-runtime checks.
 - Packaged Electron itself is now launched in Node mode on both Apple Silicon and Intel, checking the native architecture in addition to static signatures and the real browser/server smokes.
 - Acceptance of the replacement run remains pending; the successful checks above do not constitute a completed release.
+
+## Third cloud-run findings
+
+Run: https://github.com/rj-liukaiwen/OpenMausBot/actions/runs/34553618000. Candidate SHA: `01ba384b79a6a8beb58512c8e4e39f97e8c15d18`.
+
+- Universal macOS packaging, pre-sign resource validation, app and mounted-DMG signature audits, native ARM Electron launch, browser/server smokes, hashes and Artifact upload passed.
+- Linux's real renderer exposed another stale upstream fixture assumption: the packaged app uses `锐捷Bot Installed` but the smoke seeded only the former `openmausbot` / `OpenMausBot` directories, so opt-in was correctly absent. The fixture now seeds the actual installed profile and its server-data inside its disposable XDG directory, and reads lifecycle descriptors there. The production permission policy and real user data remain untouched.
+- Restart checks also retain the original isolated keyring arguments to avoid a headless keyring prompt on the second launch.
+- A replacement run must exercise every Linux lifecycle lane before accepting the release.

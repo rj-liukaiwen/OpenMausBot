@@ -35,20 +35,24 @@ if (!existsSync(executable)) throw new Error(`[smoke-linux-package] missing exec
 const sandbox = mkdtempSync(path.join(tmpdir(), "omb-linux-smoke-"));
 const home = path.join(sandbox, "home");
 const xdgConfig = path.join(sandbox, "config");
+// Packaged builds deliberately use an installed profile independent of the
+// old development profile. Seed only this disposable installed profile.
+const installedUserData = path.join(xdgConfig, "锐捷Bot Installed");
+const serverData = path.join(installedUserData, "server-data");
 const xdgRuntime = path.join(sandbox, "runtime");
 const marker = path.join(sandbox, "cua-invocations.ndjson");
 const fakeState = path.join(sandbox, "cua-serve-count");
 const sentinel = path.join(sandbox, "cua-driver");
-mkdirSync(path.join(home, ".openmausbot"), { recursive: true });
+mkdirSync(home, { recursive: true });
+mkdirSync(serverData, { recursive: true });
 mkdirSync(xdgConfig, { recursive: true });
 mkdirSync(xdgRuntime, { recursive: true, mode: 0o700 });
 chmodSync(xdgRuntime, 0o700);
 writeFileSync(
-  path.join(home, ".openmausbot", "config.json"),
+  path.join(serverData, "config.json"),
   JSON.stringify({ instances: { ghost: { driver: "not-a-real-driver", displayName: "Ghost" } } }),
 );
-for (const appName of ["openmausbot", "OpenMausBot"]) {
-  const userData = path.join(xdgConfig, appName);
+for (const userData of [installedUserData]) {
   mkdirSync(userData, { recursive: true, mode: 0o700 });
   chmodSync(userData, 0o700);
   writeFileSync(
@@ -337,7 +341,7 @@ try {
   if (sessionBlocked) {
     await waitForExit();
     if (existsSync(marker)) throw new Error("release safety block still invoked a CUA executable");
-    const activeUserData = ["openmausbot", "OpenMausBot"]
+    const activeUserData = ["锐捷Bot Installed"]
       .map((name) => path.join(xdgConfig, name))
       .find((directory) => existsSync(path.join(directory, "cua-connection.json")));
     if (!activeUserData) throw new Error("release safety smoke could not locate the CUA descriptor");
@@ -384,7 +388,7 @@ try {
     if (existsSync(marker)) {
       throw new Error(`packaged app invoked the ambient driver:\n${readFileSync(marker, "utf8")}`);
     }
-    const userData = ["openmausbot", "OpenMausBot"]
+    const userData = ["锐捷Bot Installed"]
       .map((name) => path.join(xdgConfig, name))
       .find((directory) => existsSync(path.join(directory, "cua-connection.json")));
     if (!userData) throw new Error("bundled smoke could not locate the CUA descriptor");
@@ -480,7 +484,7 @@ try {
       await delay(50);
     }
     if (staleHealth?.ok) throw new Error("embedded harness survived hard Electron death");
-    const userData = ["openmausbot", "OpenMausBot"]
+    const userData = ["锐捷Bot Installed"]
       .map((name) => path.join(xdgConfig, name))
       .find((directory) => existsSync(path.join(directory, "cua-connection.json")));
     if (!userData) throw new Error("hard-death smoke could not locate the CUA descriptor");
@@ -493,7 +497,7 @@ try {
 
     let restartOutput = "";
     let restartResult = null;
-    const restart = spawn(executable, wayland ? ["--ozone-platform=x11"] : [], {
+    const restart = spawn(executable, electronArgs, {
       cwd: root,
       detached: true,
       env: { ...desktopEnv, OMB_SMOKE_KEEP_OPEN: "0" },

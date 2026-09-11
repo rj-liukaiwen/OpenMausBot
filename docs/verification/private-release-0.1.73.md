@@ -33,3 +33,12 @@ Do not promote this checkpoint to an accepted installer. Update this record with
 - macOS failed before packaging: the local-computer proxy compared a canonical import URL to an aliased argv path (`/var` versus `/private/var`) and exited successfully without serving a discovery response. A directory-alias child-process regression reproduced empty stdout on local Windows before the fix. Canonical path comparison fixes the entry guard; 12 isolated proxy tests and the rebuilt packaged-server smoke pass locally. The next Mac run must confirm the original scenario.
 - Windows CUA staging selected Git Bash GNU tar, which interpreted a Windows drive-letter archive path as a remote host. The Windows packaging step now explicitly uses PowerShell, as required by the supplied guide, with native-command failures propagated.
 - Universal browser lookup is also used by the packaged-server smoke, so its manifest and executable checks select the host CPU's vendor directory.
+
+## Second cloud-run findings
+
+Run: https://github.com/rj-liukaiwen/OpenMausBot/actions/runs/34552772665, workflow commit `8948fa60c5e1eaacb8d502274a64bc3d04d89e32`.
+
+- macOS passed the proxy regression and built both Universal containers. The app and mounted DMG each passed audits of 41 Mach-O files and 10 bundles. Resource validation then correctly rejected missing `app-update.yml`: electron-builder's `dir` target does not generate it. The custom merge now writes the private feed and updater cache metadata before signing, then validates all package resources before packaging.
+- Linux passed native X11 input, package content, DEB installation/upgrade, browser, and packaged-server checks. The renderer smoke still expected the upstream title although this branch's UI is named 锐捷Bot. It now checks the exact title from this branch's source UI, retaining the remaining lifecycle and native-runtime checks.
+- Packaged Electron itself is now launched in Node mode on both Apple Silicon and Intel, checking the native architecture in addition to static signatures and the real browser/server smokes.
+- Acceptance of the replacement run remains pending; the successful checks above do not constitute a completed release.

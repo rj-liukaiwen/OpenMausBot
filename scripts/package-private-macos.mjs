@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { stringify } from "yaml";
 import { signAdHoc, verifyAdHocUniversal, run } from "./private-macos-sign.mjs";
+import privateConfig from "../electron-builder.testing.mjs";
 
 if (process.platform !== "darwin") throw new Error("Build the universal Mac package on macOS.");
 const root = resolve(".");
@@ -54,6 +55,16 @@ const browserRoot = join(outputApp, "Contents/Resources/browser-engine");
 mkdirSync(browserRoot);
 for (const arch of ["arm64", "x64"]) cpSync(join(vendor, `darwin-${arch}`), join(browserRoot, `darwin-${arch}`), { recursive: true });
 writeFileSync(join(browserRoot, "universal.json"), `${JSON.stringify({ schemaVersion: 1, targets: ["darwin-arm64", "darwin-x64"] }, null, 2)}\n`);
+
+// electron-builder's directory target does not create updater metadata. Add it
+// to the merged app before sealing resources, using the same private feed.
+const packageName = JSON.parse(readFileSync("package.json", "utf8")).name;
+if (packageName !== "openmausbot") throw new Error("Review the updater cache name after renaming the package.");
+writeFileSync(join(outputApp, "Contents/Resources/app-update.yml"), stringify({
+  ...privateConfig.publish[0],
+  updaterCacheDirName: `${packageName}-updater`,
+}));
+execFileSync(process.execPath, ["scripts/check-private-package.mjs", join(outputApp, "Contents/Resources")], { stdio: "inherit" });
 
 // No app byte is modified after this pass. The final DMG is mounted and
 // independently verified; a successful electron-builder exit is not the gate.

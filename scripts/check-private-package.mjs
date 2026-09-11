@@ -11,6 +11,7 @@ assert.equal(update.repo, "OpenMausBot");
 assert.equal(update.private, true);
 assert.equal(update.publisherName, undefined);
 assert.equal(update.token, undefined);
+assert.equal(update.updaterCacheDirName, "openmausbot-updater");
 const meta = JSON.parse(readFileSync(join(resources, "private-release.json"), "utf8"));
 assert.equal(meta.version, JSON.parse(readFileSync("package.json", "utf8")).version);
 assert.equal(meta.repository, "rj-liukaiwen/OpenMausBot");

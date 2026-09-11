@@ -190,7 +190,9 @@ jobs:
         run: node scripts/package-private-macos.mjs
       - name: Verify Apple Silicon browser and packaged server
         run: |
-          res="$PWD/release/mac-universal/OpenMausBot.app/Contents/Resources"
+          app="$PWD/release/mac-universal/OpenMausBot.app"
+          res="$app/Contents/Resources"
+          ELECTRON_RUN_AS_NODE=1 "$app/Contents/MacOS/OpenMausBot" -e 'if (process.arch !== "arm64") process.exit(1); console.log("Packaged Electron ARM runtime started")'
           node scripts/check-private-package.mjs "$res"
           node scripts/smoke-browser-bundle.mjs --resources "$res"
           OMB_SMOKE_DIST="$res/server" node scripts/smoke-packaged-server.mjs --browser-bundle "$res/browser-engine"
@@ -232,6 +234,7 @@ jobs:
           ditto -xk "mac-artifacts/OpenMausBot-$RELEASE_VERSION-universal.zip" "$RUNNER_TEMP/mac-test"
           app="$RUNNER_TEMP/mac-test/OpenMausBot.app"
           res="$app/Contents/Resources"
+          ELECTRON_RUN_AS_NODE=1 "$app/Contents/MacOS/OpenMausBot" -e 'if (process.arch !== "x64") process.exit(1); console.log("Packaged Electron Intel runtime started")'
           node scripts/private-macos-sign.mjs "$app" "$RUNNER_TEMP/mac-intel-signatures.json"
           node scripts/check-private-package.mjs "$res"
           node scripts/smoke-browser-bundle.mjs --resources "$res"

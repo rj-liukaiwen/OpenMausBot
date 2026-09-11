@@ -23,10 +23,20 @@ Destination: `rj-liukaiwen/OpenMausBot`, verified private, independent repositor
 - Type checks: passed. Browser regressions: 141 tests in 4 files passed.
 - Packaged server: passed in an isolated temporary home without reachable node_modules; 13 proxy paths, MCP shutdown frames, closed-parent-stderr recovery and connector catalog checks passed.
 - Local nested pnpm initially selected a global pnpm 11. The validation shell now uses task-local Corepack shims and pnpm 10.33.0; global configuration was not changed.
-- GitHub three-platform packaging/signing/Artifact acceptance: run requested, pending. Workflow commit `6a53a07cce4b9f84c491667a7216f37500b033bf`; run https://github.com/rj-liukaiwen/OpenMausBot/actions/runs/34552303261.
+- GitHub three-platform packaging/signing/Artifact acceptance: passed. Accepted run https://github.com/rj-liukaiwen/OpenMausBot/actions/runs/34554472677, workflow commit `e21bd772821cdfcb98f1007ef49f23cc143d4bf0`, shared candidate SHA `585534fdd382b9470a77bcdd9c3c410cc21bb38a`.
 - Physical Intel/Apple Silicon TCC, clean installation and real account/upgrade acceptance: not run.
 
-Do not promote this checkpoint to an accepted installer. Update this record with the real Actions run, candidate SHA, platform results and any required user action.
+The automated package gates passed; these remain private evaluation candidates pending physical-machine acceptance. The earlier failed-run findings below are retained as diagnosis history.
+
+## Accepted cloud run and downloads
+
+- All six jobs succeeded: prepare, Windows, Linux, macOS Universal ARM, macOS Intel verification, private release assembly.
+- Release draft: https://github.com/rj-liukaiwen/OpenMausBot/releases/tag/untagged-bbbc55a55c3d583dd24b (release ID `386750961`, tag name `v0.1.73`, private repository). All 21 assets are uploaded and have GitHub SHA-256 digests; the publisher checked exact file sizes, hashes, update feeds and a common candidate SHA.
+- Windows Artifact `10182319694`: EXE, ZIP, update feed, blockmap, checksum and report. Authenticode `NotSigned`, real bundled browser and isolated packaged-server checks passed.
+- Linux Artifact `10182255085`: DEB, AppImage, update feed, checksum and report. Native X11 input, package structure, DEB install/legacy-mode upgrade, browser/server checks, unpacked/AppImage/installed-DEB launches, SIGTERM cleanup, hard-kill restart, X11 crash/retry and Wayland fail-closed lanes passed.
+- macOS Artifact `10182218969`: Universal DMG/ZIP, feeds, blockmaps, reports and checksums. Final app and mounted DMG each passed 41 Mach-O and 10 bundle audits. Native Electron, browser and packaged-server checks passed on both ARM and Intel using the same Universal ZIP.
+- Release remains a draft/pre-release candidate for personal testing. No Developer ID, notarization, physical TCC persistence, real account onboarding or real-machine upgrade acceptance is claimed. Windows installation/upgrade was not interactively tested on a physical Windows machine.
+- Documentation-only commits after the accepted workflow commit do not change the candidate SHA or uploaded package bytes.
 
 ## First cloud-run findings
 

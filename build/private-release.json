@@ -1,11 +1,16 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.73",
-  "upstreamSha": "a9c8187712e6f99c8a63dadec2835c43dd982446",
+  "version": "0.1.74",
+  "sourceSha": "9bfcce57c8c7d142de800a83e44927445d2cd2e2",
+  "upstreamSha": "d7cd142712c11f44a7a13d9e75c8d31ad9799891",
   "repository": "rj-liukaiwen/OpenMausBot",
+  "workflowRun": "34571740109",
   "signing": {
     "windows": "unsigned",
     "macos": "ad-hoc signed, not notarized"
   },
-  "usage": "private development, test and evaluation only"
+  "usage": "public test candidate; Enterprise redistribution authorized by repository owner",
+  "humanAcceptance": "skipped-by-owner",
+  "acceptancePolicy": "legacy-evaluation",
+  "dataDirectory": "~/.ruijiebot"
 }

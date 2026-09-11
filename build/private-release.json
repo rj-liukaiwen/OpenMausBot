@@ -1,8 +1,10 @@
 {
   "schemaVersion": 1,
   "version": "0.1.73",
+  "sourceSha": "6a53a07cce4b9f84c491667a7216f37500b033bf",
   "upstreamSha": "a9c8187712e6f99c8a63dadec2835c43dd982446",
   "repository": "rj-liukaiwen/OpenMausBot",
+  "workflowRun": "34552303261",
   "signing": {
     "windows": "unsigned",
     "macos": "ad-hoc signed, not notarized"

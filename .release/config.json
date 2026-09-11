@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "RuijieBot",
+  "node": "24.12.0",
+  "packageManager": "pnpm",
+  "versionFiles": ["package.json"],
+  "adapter": ".release/adapter.mjs",
+  "targets": ["windows-x64", "linux-x64", "macos-universal"],
+  "signing": "testing",
+  "allowPrerelease": false,
+  "enterpriseRedistribution": "Authorized by the repository owner for this release",
+  "releaseNotes": ["Enterprise retained under owner-confirmed redistribution authorization."]
+}

@@ -1,0 +1,30 @@
+name: 发布软件
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 版本号
+        required: true
+        type: string
+        default: v0.1.74
+      source_ref:
+        description: 本仓库的分支或提交
+        default: main
+        type: string
+      mode:
+        description: 当前先通过预检；缺项会显示在运行摘要中
+        default: check
+        type: choice
+        options: [check, artifacts, draft]
+permissions:
+  contents: read
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: rj-liukaiwen/release-kit/.github/workflows/desktop.yml@88e87d9032863e13062b2d5c60a8c03257269c36
+    with:
+      toolkit_sha: 88e87d9032863e13062b2d5c60a8c03257269c36
+      version: ${{ inputs.version }}
+      source_ref: ${{ inputs.source_ref }}
+      mode: ${{ inputs.mode }}
